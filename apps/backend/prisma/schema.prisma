@@ -1,0 +1,506 @@
+// Prisma schema — publication-automation
+// Motor: PostgreSQL (Supabase) — conexión pooled (url) + directa (directUrl)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// =============================================================================
+// USUARIOS, AUTENTICACIÓN Y AUTORIZACIÓN
+// =============================================================================
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  username      String   @unique
+  passwordHash  String
+  displayName   String
+  avatarUrl     String?
+  bio           String?
+  isActive      Boolean  @default(true)
+  isTwoFactorEnabled Boolean @default(false)
+  lastLoginAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  roles        UserRole[]
+  commentActions CommentAction[] @relation("CommentActionPerformedByUser")
+  sessions     Session[]
+  refreshTokens RefreshToken[]
+  facebookAccounts FacebookAccount[]
+  pages        Page[]
+  campaigns    Campaign[]
+  posts        Post[]
+  auditLogs    AuditLog[]
+  twoFactorSecret TwoFactorSecret?
+
+  @@index([email])
+}
+
+model UserRole {
+  userId   String
+  role     Role
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([userId, role])
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  OPERATOR
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  ip        String?
+  userAgent String?
+  expiresAt DateTime
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, revoked])
+  @@index([expiresAt])
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+  revoked   Boolean  @default(false)
+  replacedByTokenId String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model TwoFactorSecret {
+  userId    String   @id
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  secretEncrypted String
+  otpauthUrl String
+  confirmed Boolean  @default(false)
+  backupCodesEncrypted String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// =============================================================================
+// CUENTAS Y PÁGINAS DE FACEBOOK (integración con la API oficial de Meta)
+// =============================================================================
+
+model FacebookAccount {
+  id                    String   @id @default(cuid())
+  userId                String
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  facebookUserId        String
+  facebookUserName      String?
+  email                 String?
+  // Token de acceso del usuario (cifrado en reposo con AES-256-GCM)
+  accessTokenEncrypted  String
+  tokenType             String   @default("long-lived")
+  tokenExpiresAt        DateTime?
+  refreshTokenEncrypted String?
+  scopes                Json?
+  status                AccountStatus @default(ACTIVE)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  pages                Page[]
+  campaigns            Campaign[]
+
+  @@unique([userId, facebookUserId])
+  @@index([userId])
+}
+
+enum AccountStatus {
+  ACTIVE
+  EXPIRED
+  REVOKED
+  DISCONNECTED
+}
+
+model Page {
+  id            String   @id @default(cuid())
+  accountId     String
+  account       FacebookAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  facebookPageId String
+  name          String
+  category      String?
+  pictureUrl    String?
+  description   String?
+  url           String?
+  followersCount Int     @default(0)
+  // Token de página (cifrado en reposo)
+  accessTokenEncrypted String
+  tokenExpiresAt DateTime?
+  isDefault     Boolean  @default(false)
+  status        PageStatus @default(ACTIVE)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  campaigns    Campaign[]
+  posts        Post[]
+  comments     Comment[]
+  pageMetrics  PageMetric[]
+
+  @@unique([accountId, facebookPageId])
+  @@index([userId])
+  @@index([status])
+}
+
+enum PageStatus {
+  ACTIVE
+  DISABLED
+  REVOKED
+}
+
+model PageMetric {
+  id               String   @id @default(cuid())
+  pageId           String
+  page             Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  followersCount   Int      @default(0)
+  totalPosts       Int      @default(0)
+  totalInteractions Int     @default(0)
+  reachedCount     Int      @default(0)
+  impressionsCount Int      @default(0)
+  engagedUsersCount Int     @default(0)
+  measuredAt       DateTime @default(now())
+  raw              Json?
+
+  @@index([pageId, measuredAt])
+}
+
+// =============================================================================
+// CAMPAÑAS DE PUBLICACIÓN AUTOMÁTICA
+// =============================================================================
+
+model Campaign {
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId        String
+  account          FacebookAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  pageId           String
+  page             Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  name             String
+  description      String?
+  contentTemplate  String
+  imageUrls        Json?
+  videoUrl         String?
+  // Distribución por grupos: cada grupo % + intervalo interno + espera posterior
+  groups           Json?    // verseed: CampaignGroup schedule en runtime
+  totalActions     Int
+  intervalSeconds  Int      @default(5)
+  groupsWaitSeconds Int     @default(1800)
+  startAt          DateTime
+  endsAt           DateTime?
+  status           CampaignStatus @default(DRAFT)
+  // Control de ejecución
+  actionsDone      Int      @default(0)
+  actionsFailed    Int      @default(0)
+  errorMessage     String?
+  metaPostId       String?
+  // Prevención de duplicados / idempotencia: hash del contenido + page + fecha
+  dedupeKey        String?
+  aiGenerated      Boolean  @default(false)
+  aiPrompt         String?
+  aiProvider       String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  completedAt      DateTime?
+
+  campaignGroups  CampaignGroup[]
+  posts           Post[]
+  auditLogs       AuditLog[]
+
+  @@unique([pageId, dedupeKey])
+  @@index([userId, status])
+  @@index([status, startAt])
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  RUNNING
+  PAUSED
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model CampaignGroup {
+  id           String   @id @default(cuid())
+  campaignId   String
+  campaign     Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  position     Int
+  name         String
+  percentage   Int
+  intervalSeconds Int  @default(5)
+  waitAfterSeconds Int @default(0)
+  status       GroupStatus @default(PENDING)
+  // Cola sobre PostgreSQL: cuándo el grupo debe ejecutar su siguiente acción
+  // y hasta cuándo el worker que lo tomó mantiene el "lease" (claim atómico).
+  nextRunAt    DateTime?
+  leaseExpiresAt DateTime?
+  actionsTarget Int @default(0)
+  actionsDone   Int @default(0)
+  attempts     Int      @default(0)
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([campaignId, position])
+  @@index([campaignId])
+  @@index([status, nextRunAt])
+}
+
+enum GroupStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+// =============================================================================
+// PUBLICACIONES, INTERACCIONES Y COMENTARIOS
+// =============================================================================
+
+model Post {
+  id            String   @id @default(cuid())
+  campaignId    String?
+  campaign      Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pageId        String
+  page          Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  content       String
+  imageUrls     Json?
+  videoUrl      String?
+  scheduledFor  DateTime?
+  publishedAt   DateTime?
+  // Referencia al post creado en el Graph API de Meta
+  metaObjectId  String?
+  metaPermalinkUrl String?
+  status        PostStatus @default(DRAFT)
+  // IA
+  aiGenerated   Boolean  @default(false)
+  aiProvider    String?
+  aiModel       String?
+  // Idempotencia: evitar duplicados
+  dedupeKey     String?
+  statusChangedAt DateTime @updatedAt
+
+  comments      Comment[]
+  auditLogs     AuditLog[]
+  engagement    EngagementMetric?
+
+  @@unique([pageId, dedupeKey])
+  @@index([userId, status])
+  @@index([pageId, publishedAt])
+  @@index([scheduledFor])
+}
+
+enum PostStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHING
+  PUBLISHED
+  PARTIALLY_FAILED
+  FAILED
+  CANCELLED
+}
+
+model Comment {
+  id             String   @id @default(cuid())
+  postId         String
+  post           Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  pageId         String
+  page           Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  metaCommentId  String   @unique
+  fromUserId     String?
+  fromName       String?
+  parentId       String?
+  parent         Comment? @relation("CommentReplies", fields: [parentId], references: [id], onDelete: SetNull)
+  replies        Comment[] @relation("CommentReplies")
+  message        String
+  isHidden       Boolean  @default(false)
+  isFromPage     Boolean  @default(false)
+  riskLevel      RiskLevel @default(NONE)
+  status         CommentStatus @default(VISIBLE)
+  analyzedAt     DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  actions        CommentAction[]
+
+  @@index([pageId, createdAt])
+  @@index([postId])
+}
+
+enum CommentStatus {
+  VISIBLE
+  HIDDEN
+  DELETED
+  RESPONDED
+}
+
+enum RiskLevel {
+  NONE
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model CommentAction {
+  id        String   @id @default(cuid())
+  commentId String
+  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  type      CommentActionType
+  // texto de la respuesta o motivo de moderación
+  payload   Json?
+  metaActionResult Json?
+  status    LogStatus @default(SUCCESS)
+  errorMessage String?
+  performedByUserId String?
+  performedByUser  User? @relation("CommentActionPerformedByUser", fields: [performedByUserId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+
+  @@index([commentId])
+}
+
+enum LogStatus {
+  SUCCESS
+  FAILURE
+  PENDING
+}
+
+enum CommentActionType {
+  REPLY
+  HIDE
+  UNHIDE
+  DELETE
+  AI_REPLY
+  MANUAL
+}
+
+model EngagementMetric {
+  id              String   @id @default(cuid())
+  postId          String   @unique
+  post            Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  likes           Int      @default(0)
+  comments        Int      @default(0)
+  shares          Int      @default(0)
+  reach           Int      @default(0)
+  impressions     Int      @default(0)
+  engagements     Int      @default(0)
+  measuredAt      DateTime @default(now())
+  raw             Json?
+
+  @@index([postId, measuredAt])
+}
+
+// =============================================================================
+// AUDITORÍA, LOGS Y CONFIGURACIÓN
+// =============================================================================
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  pageId    String?
+  campaignId String?
+  campaign   Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  postId    String?
+  post       Post?    @relation(fields: [postId], references: [id], onDelete: SetNull)
+  action    String
+  category  LogCategory @default(SYSTEM)
+  metadata  Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([campaignId])
+  @@index([createdAt])
+}
+
+enum LogCategory {
+  AUTH
+  FACEBOOK
+  CAMPAIGN
+  POST
+  COMMENT
+  AI
+  WEBHOOK
+  SYSTEM
+  SECURITY
+  DASHBOARD
+}
+
+model SystemLog {
+  id        String   @id @default(cuid())
+  level     LogLevel
+  message   String
+  context   String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([level, createdAt])
+}
+
+enum LogLevel {
+  DEBUG
+  INFO
+  WARN
+  ERROR
+}
+
+model AIConfig {
+  id          String @id @default("default")
+  provider    String @default("openai")
+  apiKeyEncrypted String @default("")
+  model       String @default("gpt-4o-mini")
+  baseUrl     String?
+  temperature Float  @default(0.7)
+  maxTokens   Int    @default(1024)
+  systemPrompt String @default("You are a social media assistant.")
+  isDefault   Boolean @default(true)
+  updatedAt   DateTime @updatedAt
+}
+
+model AppSetting {
+  id        String   @id @default("default")
+  key       String
+  value     Json?
+  updatedAt DateTime @updatedAt
+
+  @@unique([key])
+}
+
+model DashboardSnapshot {
+  id        String   @id @default(cuid())
+  userId    String
+  data      Json
+  period    String   @default("day")
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}

@@ -1,0 +1,24 @@
+{
+  "name": "publication-automation",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Gestión y automatización de publicaciones e interacciones de páginas de Facebook mediante la API oficial de Meta",
+  "license": "MIT",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:backend": "npm --workspace @pa/backend run start:dev",
+    "dev:frontend": "npm --workspace @pa/frontend run dev",
+    "build:backend": "npm --workspace @pa/backend run build",
+    "build:frontend": "npm --workspace @pa/frontend run build",
+    "db:migrate": "npm --workspace @pa/backend run prisma:migrate",
+    "db:generate": "npm --workspace @pa/backend run prisma:generate",
+    "db:seed": "npm --workspace @pa/backend run prisma:seed",
+    "test": "npm --workspace @pa/backend run test",
+    "lint": "npm --workspace @pa/frontend run lint && npm --workspace @pa/backend run lint"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

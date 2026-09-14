@@ -1,0 +1,72 @@
+name: publication-automation
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: pa-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-publication_automation}
+      POSTGRES_USER: ${POSTGRES_USER:-pa_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pa_password}
+    ports:
+      - '5433:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-pa_user} -d ${POSTGRES_DB:-publication_automation}']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  # ---------- Aplicación: API + Worker + Scheduler comparten el mismo build ----------
+  # Los tres procesos compiten por claims atómicos en PostgreSQL (sin Redis):
+  # se pueden lanzar todos, uno solo, o de más (multi-instancia sin duplicados).
+  api:
+    build:
+      context: ./
+      dockerfile: apps/backend/Dockerfile
+      target: runtime
+    image: pa/api:latest
+    container_name: pa-api
+    restart: unless-stopped
+    env_file: ./apps/backend/.env
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgresql://${POSTGRES_USER:-pa_user}:${POSTGRES_PASSWORD:-pa_password}@postgres:5432/${POSTGRES_DB:-publication_automation}
+    command: node apps/backend/dist/main.js
+    ports:
+      - '3001:3001'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  worker:
+    image: pa/api:latest
+    container_name: pa-worker
+    restart: unless-stopped
+    env_file: ./apps/backend/.env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-pa_user}:${POSTGRES_PASSWORD:-pa_password}@postgres:5432/${POSTGRES_DB:-publication_automation}
+    command: node apps/backend/dist/worker.js
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  scheduler:
+    image: pa/api:latest
+    container_name: pa-scheduler
+    restart: unless-stopped
+    env_file: ./apps/backend/.env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-pa_user}:${POSTGRES_PASSWORD:-pa_password}@postgres:5432/${POSTGRES_DB:-publication_automation}
+    command: node apps/backend/dist/scheduler.js
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

@@ -1,0 +1,41 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# build outputs
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# test
+coverage/
+.nyc_output/
+
+# env & secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# database
+*.sql
+prisma/*.db
+prisma/*.db-journal
+
+# logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# misc
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.tmp

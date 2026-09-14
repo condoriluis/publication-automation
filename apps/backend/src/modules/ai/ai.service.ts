@@ -1,0 +1,306 @@
+import { Injectable } from '@nestjs/common';
+import axios from 'axios';
+
+import { AppConfigService } from '../../config/app-config.service';
+import { PrismaService } from '../../prisma/prisma.service';
+import { AppLogger } from '../../common/logger/app-logger.service';
+import { AIConfigService } from './ai-config.service';
+import {
+  AI_MAX_TOKENS,
+  ANALYZE_SYSTEM_PROMPT,
+  COMMENT_REPLY_SYSTEM_PROMPT,
+  CommentRisk,
+  GENERATE_POST_SYSTEM_PROMPT,
+  MODERATE_SYSTEM_PROMPT,
+  PostLength,
+  POST_LENGTH_HINTS,
+} from './ai.constants';
+
+/** Se lanza cuando la IA no está configurada o el proveedor no responde. */
+export class AiUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AiUnavailableError';
+  }
+}
+
+export interface AiReplyInput {
+  pageName?: string;
+  postText?: string;
+  commentMessage: string;
+  tone?: string;
+}
+
+export interface GeneratePostInput {
+  page: { id: string; name: string; category?: string | null; description?: string | null };
+  theme: string;
+  audience?: string;
+  tone?: string;
+  length?: PostLength;
+}
+
+export interface GenerateCommentReplyInput {
+  comment: { id: string; message: string; fromName?: string | null; isFromPage: boolean };
+  post: { id: string; content: string; metaPermalinkUrl?: string | null };
+  page: { id: string; name: string; category?: string | null; description?: string | null };
+  tone?: string;
+}
+
+export interface CommentAnalysisResult {
+  commentId: string;
+  categoria: CommentRisk;
+  sentimiento: 'positivo' | 'negativo' | 'neutral';
+  tema: string;
+  razon: string;
+}
+
+/**
+ * Cliente de IA multi-proveedor (OpenAI-compatible, Anthropic, Google).
+ * Uso exclusivo para generar contenido y moderar comentarios; no ejecuta
+ * acciones sobre Meta (eso lo hace el Worker).
+ */
+@Injectable()
+export class AiService {
+  constructor(
+    private readonly config: AppConfigService,
+    private readonly aiConfig: AIConfigService,
+    private readonly prisma: PrismaService,
+    private readonly logger: AppLogger,
+  ) {}
+
+  get isEnabled(): boolean {
+    return Boolean(this.config.aiApiKey || this.aiConfig);
+  }
+
+  /** Respuesta de iaReply natural para un comentario de seguidor (workers). */
+  async generateReply(input: AiReplyInput): Promise<string> {
+    const system = [
+      'Eres un community manager profesional, cercano y respetuoso.',
+      input.pageName ? `Escribes en representación de la página "${input.pageName}".` : '',
+      'Responde con naturalidad, brevedad y en el mismo idioma del seguidor.',
+    ]
+      .filter(Boolean)
+      .join(' ');
+    const user = [
+      'Escribe una respuesta para el siguiente comentario de un seguidor:',
+      input.postText ? `Contexto del post: ${input.postText}` : '',
+      `\n${input.commentMessage}`,
+      input.tone ? `Tono requerido: ${input.tone}.` : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+    return this.chat(system, user, { maxTokens: 300 });
+  }
+
+  /** Genera el texto de una publicación para una página. */
+  async generatePostText(input: GeneratePostInput): Promise<string> {
+    const hints = POST_LENGTH_HINTS[input.length ?? 'medium']; 
+    const system = GENERATE_POST_SYSTEM_PROMPT;
+
+    const user = [
+      `Página: "${input.page.name}".`,
+      input.page.category ? `Categoría: ${input.page.category}.` : '',
+      input.page.description ? `Descripción: ${input.page.description}.` : '',
+      `Tema solicitado: ${input.theme}.`,
+      input.audience ? `Audiencia objetivo: ${input.audience}.` : '',
+      input.tone ? `Tono: ${input.tone}.` : '',
+      hints,
+      'Redacta la publicación de Facebook ahora.',
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    return this.chat(system, user);
+  }
+
+  /** Sugiere una respuesta contextual a un comentario. */
+  async generateCommentReply(input: GenerateCommentReplyInput): Promise<string> {
+    const system = COMMENT_REPLY_SYSTEM_PROMPT;
+    const user = [
+      `Página: "${input.page.name}"${input.page.category ? ` (${input.page.category})` : ''}.`,
+      'Post original del usuario:',
+      `  ${input.post.content || '(sin texto, publicación de imagen/video)'}`,
+      `Comentario del usuario "${input.comment.fromName ?? 'anónimo'}" :`,
+      `  ${input.comment.message}`,
+      input.tone ? `Tono de la respuesta solicitado: ${input.tone}.` : '',
+      'Redacta la respuesta pública ahora.',
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    return this.chat(system, user, { maxTokens: 300 });
+  }
+
+  /**
+   * Clasifica comentarios por riesgo y tono, persistiendo el resultado
+   * (riskLevel/analyzedAt). Puede tardar: se llama desde un endpoint explícito.
+   */
+  async analyzeComments(commentIds: string[]): Promise<CommentAnalysisResult[]> {
+    const results: CommentAnalysisResult[] = [];
+    for (const commentId of commentIds) {
+      const comment = await this.prisma.comment.findUnique({ where: { id: commentId } });
+      if (!comment) continue; // comenta IDs inexistentes silenciosamente
+
+      let parsed: Omit<CommentAnalysisResult, 'commentId'>;
+      try {
+        const raw = await this.chat(ANALYZE_SYSTEM_PROMPT, `Comentario:\n${comment.message}\nClasifícalo.`);
+        parsed = this.parseAiJson<Omit<CommentAnalysisResult, 'commentId'>>(raw);
+      } catch (err) {
+        this.logger.warn(`Fallo IA al analizar comentario ${commentId}: ${(err as Error).message}`);
+        continue;
+      }
+
+      const riskLevel: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' =
+        parsed.categoria === 'PELIGROSO'
+          ? 'HIGH'
+          : parsed.categoria === 'OPORTUNIDAD'
+            ? 'LOW'
+            : 'NONE';
+
+      await this.prisma.comment.update({
+        where: { id: commentId },
+        data: { riskLevel, analyzedAt: new Date() },
+      });
+
+      results.push({ commentId, ...parsed });
+    }
+    return results;
+  }
+
+  /** Propone una acción de moderación sin ejecutarla. */
+  async moderateComment(comment: { message: string }): Promise<{
+    categoria: CommentRisk;
+    accionSugerida: 'reply' | 'hide' | 'delete' | 'none';
+    justificacion: string;
+    respuestaSugerida?: string;
+  }> {
+    const raw = await this.chat(MODERATE_SYSTEM_PROMPT, `Comentario:\n${comment.message}`);
+    return this.parseAiJson<{
+      categoria: CommentRisk;
+      accionSugerida: 'reply' | 'hide' | 'delete' | 'none';
+      justificacion: string;
+      respuestaSugerida?: string;
+    }>(raw);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Transporte multi-proveedor
+  // ---------------------------------------------------------------------------
+
+  private async chat(system: string, user: string, opts?: { maxTokens?: number }): Promise<string> {
+    const { provider, model, apiKey, baseUrl } = await this.aiConfig.getActive();
+    if (!apiKey) throw new AiUnavailableError('Servicio de IA no disponible: falta API key configurada');
+
+    const maxTokens = opts?.maxTokens ?? AI_MAX_TOKENS;
+
+    if (provider === 'anthropic') {
+      return this.chatAnthropic({ baseUrl, model, apiKey, system, user, maxTokens });
+    }
+    if (provider === 'google') {
+      return this.chatGoogle({ baseUrl, model, apiKey, system, user, maxTokens });
+    }
+    return this.chatOpenAiCompatible({ baseUrl, model, apiKey, system, user, maxTokens });
+  }
+
+  private async chatOpenAiCompatible(args: {
+    baseUrl: string;
+    model: string;
+    apiKey: string;
+    system: string;
+    user: string;
+    maxTokens: number;
+  }): Promise<string> {
+    const baseUrl = args.baseUrl.replace(/\/$/, '');
+    const { data } = await axios.post<{ choices?: Array<{ message?: { content?: string } }> }>(
+      `${baseUrl}/chat/completions`,
+      {
+        model: args.model,
+        temperature: 0.7,
+        max_tokens: args.maxTokens,
+        messages: [
+          { role: 'system', content: args.system },
+          { role: 'user', content: args.user },
+        ],
+      },
+      { headers: { Authorization: `Bearer ${args.apiKey}`, 'Content-Type': 'application/json' }, timeout: 60_000 },
+    );
+    const content = data.choices?.[0]?.message?.content?.trim();
+    if (!content) throw new AiUnavailableError('El proveedor de IA devolvió una respuesta vacía');
+    this.logger.debug(`IA (openai-compatible) generó ${content.length} chars`);
+    return content;
+  }
+
+  private async chatAnthropic(args: {
+    baseUrl: string;
+    model: string;
+    apiKey: string;
+    system: string;
+    user: string;
+    maxTokens: number;
+  }): Promise<string> {
+    const baseUrl = args.baseUrl.replace(/\/$/, '');
+    const { data } = await axios.post<{ content?: Array<{ text?: string }> }>(
+      `${baseUrl}/v1/messages`,
+      {
+        model: args.model,
+        max_tokens: args.maxTokens,
+        system: args.system,
+        messages: [{ role: 'user', content: args.user }],
+      },
+      {
+        headers: {
+          'x-api-key': args.apiKey,
+          'anthropic-version': '2023-06-01',
+          'Content-Type': 'application/json',
+        },
+        timeout: 60_000,
+      },
+    );
+    const content = data.content?.find((c) => c.text)?.text?.trim();
+    if (!content) throw new AiUnavailableError('El proveedor de IA devolvió una respuesta vacía');
+    this.logger.debug(`IA (anthropic) generó ${content.length} chars`);
+    return content;
+  }
+
+  private async chatGoogle(args: {
+    baseUrl: string;
+    model: string;
+    apiKey: string;
+    system: string;
+    user: string;
+    maxTokens: number;
+  }): Promise<string> {
+    const baseUrl = args.baseUrl.replace(/\/$/, '');
+    const { data } = await axios.post<{ candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }>(
+      `${baseUrl}/models/${encodeURIComponent(args.model)}:generateContent`,
+      {
+        system_instruction: { parts: [{ text: args.system }] },
+        contents: [{ role: 'user', parts: [{ text: args.user }] }],
+        generationConfig: { maxOutputTokens: args.maxTokens, temperature: 0.7 },
+      },
+      {
+        params: { key: args.apiKey },
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 60_000,
+      },
+    );
+    const content = data.candidates?.[0]?.content?.parts?.map((p) => p.text).join('')?.trim();
+    if (!content) throw new AiUnavailableError('El proveedor de IA devolvió una respuesta vacía');
+    this.logger.debug(`IA (google) generó ${content.length} chars`);
+    return content;
+  }
+
+  /** Extrae JSON de la respuesta del modelo, tolerando fences de código. */
+  private parseAiJson<T>(raw: string): T {
+    const cleaned = raw
+      .replace(/```json/gi, '')
+      .replace(/```/g, '')
+      .trim();
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
+    if (start === -1 || end === -1 || end <= start) {
+      throw new AiUnavailableError('El modelo no devolvió JSON parseable');
+    }
+    return JSON.parse(cleaned.slice(start, end + 1)) as T;
+  }
+}
