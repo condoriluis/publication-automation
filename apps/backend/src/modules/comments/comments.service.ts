@@ -12,6 +12,7 @@ import { CommentFilterDto } from './dto/comment-filter.dto';
 import { ReplyCommentDto } from './dto/reply-comment.dto';
 import { ModerateCommentDto } from './dto/moderate-comment.dto';
 import { FacebookGraphError } from '../facebook/facebook.service';
+import { CommentAutomationService } from './comment-automation.service';
 
 export type CommentDetail = Comment & {
   post: { id: string; content: string; metaPermalinkUrl: string | null };
@@ -28,6 +29,7 @@ export class CommentsService {
     private readonly executor: CampaignExecutorService,
     private readonly pagination: PaginationHelper,
     private readonly audit: AuditService,
+    private readonly automation: CommentAutomationService,
     private readonly logger: AppLogger,
   ) { }
 
@@ -43,8 +45,16 @@ export class CommentsService {
       ...(query.pageId ? { pageId: query.pageId } : {}),
       ...(query.riskLevel ? { riskLevel: query.riskLevel } : {}),
       ...(query.status ? { status: query.status } : {}),
+      ...(query.classification ? { classification: query.classification } : {}),
+      ...(query.needsReview ? { needsReview: query.needsReview === 'true' } : {}),
+      ...(query.needsAnalysis
+        ? { status: CommentStatus.VISIBLE, analyzedAt: null, isFromPage: false }
+        : {}),
       ...(query.needsModeration === 'true'
-        ? { status: CommentStatus.VISIBLE, riskLevel: { in: ['MEDIUM', 'HIGH'] } }
+        ? {
+            status: CommentStatus.VISIBLE,
+            OR: [{ riskLevel: { in: ['MEDIUM', 'HIGH'] } }, { needsReview: true }],
+          }
         : {}),
     };
 
@@ -92,6 +102,7 @@ export class CommentsService {
     let synced = 0;
     let skipped = 0;
     let after: string | undefined;
+    const newCommentIds: string[] = [];
 
     do {
       const page = await this.facebook.getPostComments(post.metaObjectId, post.pageId, { limit: 100, after });
@@ -116,7 +127,8 @@ export class CommentsService {
           }
           continue;
         }
-        await this.prisma.comment.create({ data: { postId, ...data } });
+        const created = await this.prisma.comment.create({ data: { postId, ...data } });
+        newCommentIds.push(created.id);
         synced += 1;
       }
       after = page.paging?.cursors?.after;
@@ -131,6 +143,14 @@ export class CommentsService {
       metadata: { synced, skipped },
     });
     this.logger.log(`Sincronización de comentarios: ${synced} nuevos, ${skipped} ya respondidos (post ${postId})`);
+
+    // Disparar automatización (clasificación + reglas) para los comentarios nuevos
+    for (const commentId of newCommentIds) {
+      void this.automation.processNewComment(commentId).catch(err => {
+        this.logger.warn(`Automatización de comentario ${commentId} fallida: ${(err as Error).message}`, 'Comments');
+      });
+    }
+
     return { synced, skipped };
   }
 
@@ -271,11 +291,11 @@ export class CommentsService {
     message: string;
     isHidden?: boolean;
     createdAt?: Date;
-  }): Promise<Comment | null> {
+  }): Promise<{ comment: Comment; created: boolean } | null> {
     if (!input.metaCommentId) return null;
     const existing = await this.prisma.comment.findUnique({ where: { metaCommentId: input.metaCommentId } });
-    if (existing) return existing;
-    return this.prisma.comment.create({
+    if (existing) return { comment: existing, created: false };
+    const created = await this.prisma.comment.create({
       data: {
         pageId: input.pageId,
         postId: input.postId,
@@ -290,6 +310,7 @@ export class CommentsService {
         ...(input.createdAt ? { createdAt: input.createdAt } : {}),
       },
     });
+    return { comment: created, created: true };
   }
 
   // ---------------------------------------------------------------------------

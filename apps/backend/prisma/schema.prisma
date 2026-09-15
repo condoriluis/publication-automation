@@ -158,6 +158,7 @@ model Page {
   campaigns    Campaign[]
   posts        Post[]
   comments     Comment[]
+  commentRules CommentRule[]
   pageMetrics  PageMetric[]
 
   @@unique([accountId, facebookPageId])
@@ -344,6 +345,9 @@ model Comment {
   isHidden       Boolean  @default(false)
   isFromPage     Boolean  @default(false)
   riskLevel      RiskLevel @default(NONE)
+  classification CommentClassification?
+  confidence     Float?
+  needsReview    Boolean  @default(false)
   status         CommentStatus @default(VISIBLE)
   analyzedAt     DateTime?
   createdAt      DateTime @default(now())
@@ -353,6 +357,7 @@ model Comment {
 
   @@index([pageId, createdAt])
   @@index([postId])
+  @@index([needsReview])
 }
 
 enum CommentStatus {
@@ -369,6 +374,38 @@ enum RiskLevel {
   HIGH
 }
 
+enum CommentClassification {
+  INSULTO
+  PREGUNTA
+  SPAM
+  NORMAL
+  OPORTUNIDAD
+}
+
+enum CommentRuleAction {
+  REPLY
+  HIDE
+  DELETE
+  FLAG_REVIEW
+}
+
+model CommentRule {
+  id             String   @id @default(cuid())
+  pageId         String
+  page           Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  name           String
+  enabled        Boolean  @default(true)
+  keywords       Json?    // string[] — substrings a buscar en el mensaje
+  classifications Json?   // CommentClassification[] — vacío = cualquiera
+  maxConfidence  Int?     // solo aplicar si la IA tiene confianza <= este valor (0-100)
+  action         CommentRuleAction @default(REPLY)
+  replyTemplate  String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([pageId])
+}
+
 model CommentAction {
   id        String   @id @default(cuid())
   commentId String
@@ -377,13 +414,16 @@ model CommentAction {
   // texto de la respuesta o motivo de moderación
   payload   Json?
   metaActionResult Json?
+  leaseExpiresAt DateTime? // claim atómico del worker
   status    LogStatus @default(SUCCESS)
+  executeAt DateTime? // para acciones diferidas (worker la procesa)
   errorMessage String?
   performedByUserId String?
   performedByUser  User? @relation("CommentActionPerformedByUser", fields: [performedByUserId], references: [id], onDelete: SetNull)
   createdAt DateTime @default(now())
 
   @@index([commentId])
+  @@index([status, executeAt])
 }
 
 enum LogStatus {

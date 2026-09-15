@@ -7,11 +7,15 @@ import { AuditModule } from '../audit/audit.module';
 import { CampaignExecutionModule } from '../../workers/campaign-execution.module';
 import { CommentsController } from './comments.controller';
 import { CommentsService } from './comments.service';
+import { CommentAutomationService } from './comment-automation.service';
+import { CommentWorkerService } from './comment-worker.service';
+import { CommentRulesService } from './comment-rules.service';
+import { CommentRulesController } from './comment-rules.controller';
 
 @Module({
   imports: [PaginationModule, CampaignExecutionModule, FacebookModule, AiModule, AuditModule],
-  controllers: [CommentsController],
-  providers: [CommentsService],
-  exports: [CommentsService],
+  controllers: [CommentsController, CommentRulesController],
+  providers: [CommentsService, CommentAutomationService, CommentWorkerService, CommentRulesService],
+  exports: [CommentsService, CommentAutomationService],
 })
 export class CommentsModule {}

@@ -1,6 +1,6 @@
 import { Body, Controller, Get, NotFoundException, Post, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Permissions } from '../../common/decorators/auth.decorators';
+import { CurrentUser, Permissions } from '../../common/decorators/auth.decorators';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -8,6 +8,7 @@ import { AiService, CampaignConfigResult, CommentAnalysisResult } from './ai.ser
 import { GenerateCommentReplyDto } from './dto/generate-comment-reply.dto';
 import { GenerateTextDto } from './dto/generate-text.dto';
 import { AnalyzeCommentsDto } from './dto/analyze-comments.dto';
+import { AnalyzePendingCommentsDto } from './dto/analyze-pending-comments.dto';
 import { GenerateCampaignDto } from './dto/generate-campaign.dto';
 
 @ApiTags('Inteligencia Artificial')
@@ -114,5 +115,21 @@ export class AiController {
   async analyzeComments(@Body() dto: AnalyzeCommentsDto): Promise<{ success: boolean; results: CommentAnalysisResult[] }> {
     const results = await this.aiService.analyzeComments(dto.commentIds);
     return { success: true, results };
+  }
+
+  @Post('analyze-pending-comments')
+  @Permissions('ai:use')
+  @ApiOperation({ summary: 'Analiza automáticamente los comentarios pendientes (sin clasificar) del usuario' })
+  async analyzePendingComments(
+    @Body() dto: AnalyzePendingCommentsDto,
+    @CurrentUser('sub') userId: string,
+  ): Promise<{
+    success: boolean;
+    requested: number;
+    analyzed: CommentAnalysisResult[];
+    alreadyAnalyzed: number;
+  }> {
+    const result = await this.aiService.analyzePendingComments(userId, dto.pageId, dto.limit);
+    return { success: true, ...result };
   }
 }

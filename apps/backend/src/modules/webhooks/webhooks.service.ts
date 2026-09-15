@@ -4,6 +4,7 @@ import { AppLogger } from '../../common/logger/app-logger.service';
 import { AppConfigService as AppConfig } from '../../config/app-config.service';
 import { CryptoService } from '../../common/crypto/crypto.service';
 import { CommentsService } from '../comments/comments.service';
+import { CommentAutomationService } from '../comments/comment-automation.service';
 
 export interface IncomingWebhookComment {
   metaCommentId: string;
@@ -52,6 +53,7 @@ export class WebhooksService {
     private readonly appConfig: AppConfig,
     private readonly crypto: CryptoService,
     private readonly commentsService: CommentsService,
+    private readonly commentAutomation: CommentAutomationService,
   ) {}
 
   verifySignature(rawBody: Buffer, signatureHeader: string): boolean {
@@ -139,7 +141,7 @@ export class WebhooksService {
     const fromName = typeof from.name === 'string' ? from.name : undefined;
     const createdAt = v.created_time !== undefined ? new Date(Number(v.created_time) * 1000) : undefined;
 
-    await this.commentsService.handleIncomingComment({
+    const result = await this.commentsService.handleIncomingComment({
       metaCommentId,
       pageId: page.id,
       postId: post.id,
@@ -150,5 +152,13 @@ export class WebhooksService {
       isHidden: v.is_hidden === true,
       createdAt,
     });
+
+    // Comentario nuevo (no duplicado): disparar automatización (clasificación + reglas)
+    if (result?.created) {
+      const commentId = result.comment.id;
+      void this.commentAutomation.processNewComment(commentId).catch(err => {
+        this.logger.warn(`Automatización de comentario ${commentId} fallida: ${(err as Error).message}`, 'WebhooksService');
+      });
+    }
   }
 }

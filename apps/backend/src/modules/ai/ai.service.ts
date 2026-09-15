@@ -1,5 +1,6 @@
 ﻿import { Injectable } from '@nestjs/common';
 import axios from 'axios';
+import { CommentStatus, Prisma } from '@prisma/client';
 
 import { AppConfigService } from '../../config/app-config.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -9,6 +10,7 @@ import {
   AI_MAX_TOKENS,
   ANALYZE_SYSTEM_PROMPT,
   COMMENT_REPLY_SYSTEM_PROMPT,
+  CommentReviewThreshold,
   CommentRisk,
   GENERATE_POST_SYSTEM_PROMPT,
   MODERATE_SYSTEM_PROMPT,
@@ -61,6 +63,8 @@ export interface CommentAnalysisResult {
   commentId: string;
   message: string;
   riskLevel: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH';
+  classification: 'NORMAL' | 'INSULTO' | 'PREGUNTA' | 'SPAM' | 'OPORTUNIDAD';
+  confidence: number | null;
   sentiment?: string;
   suggestedAction?: string;
   explanation?: string;
@@ -178,10 +182,24 @@ export class AiService {
         continue;
       }
 
-      let parsed: { categoria: CommentRisk; sentimiento: string; tema: string; razon: string };
+      let parsed: {
+        categoria: CommentRisk;
+        clasificacion?: 'NORMAL' | 'INSULTO' | 'PREGUNTA' | 'SPAM' | 'OPORTUNIDAD';
+        confianza?: number;
+        sentimiento: string;
+        tema: string;
+        razon: string;
+      };
       try {
         const raw = await this.chat(ANALYZE_SYSTEM_PROMPT, `Comentario:\n${comment.message}\nClasifícalo.`);
-        parsed = this.parseAiJson<{ categoria: CommentRisk; sentimiento: string; tema: string; razon: string }>(raw);
+        parsed = this.parseAiJson<{
+          categoria: CommentRisk;
+          clasificacion?: 'NORMAL' | 'INSULTO' | 'PREGUNTA' | 'SPAM' | 'OPORTUNIDAD';
+          confianza?: number;
+          sentimiento: string;
+          tema: string;
+          razon: string;
+        }>(raw);
       } catch (err) {
         this.logger.warn(`Fallo IA al analizar comentario ${commentId}: ${(err as Error).message}`);
         continue;
@@ -194,12 +212,22 @@ export class AiService {
             ? 'LOW'
             : 'NONE';
 
+      const classification = parsed.clasificacion ?? 'NORMAL';
+      let confidence: number | null = parsed.confianza ?? null;
+      if (typeof confidence === 'number') {
+        if (!Number.isFinite(confidence)) confidence = null;
+        else confidence = Math.min(100, Math.max(0, Math.round(confidence)));
+      } else {
+        confidence = null;
+      }
+      const needsReview = confidence !== null && confidence < CommentReviewThreshold;
+
       const suggestedAction =
         riskLevel === 'HIGH' ? 'hide' : riskLevel === 'LOW' ? 'reply' : 'none';
 
       await this.prisma.comment.update({
         where: { id: commentId },
-        data: { riskLevel, analyzedAt: new Date() },
+        data: { riskLevel, classification, confidence, needsReview, analyzedAt: new Date() },
       });
 
       // Mapeamos los campos al contrato que espera el frontend
@@ -207,12 +235,46 @@ export class AiService {
         commentId,
         message: comment.message,
         riskLevel,
+        classification,
+        confidence,
         sentiment: parsed.sentimiento,
         suggestedAction,
         explanation: `${parsed.tema} — ${parsed.razon}`,
       });
     }
     return results;
+  }
+
+  /**
+   * Analiza automáticamente los comentarios pendientes del usuario (sin clasificar),
+   * en lotes de hasta `limit`. Evita repetir el trabajo: omite los ya analizados.
+   */
+  async analyzePendingComments(
+    userId: string,
+    pageId?: string,
+    limit = 25,
+  ): Promise<{ requested: number; analyzed: CommentAnalysisResult[]; alreadyAnalyzed: number }> {
+    const where: Prisma.CommentWhereInput = {
+      isFromPage: false,
+      analyzedAt: null,
+      status: CommentStatus.VISIBLE,
+      page: { userId },
+    };
+    if (pageId) where.pageId = pageId;
+
+    const pending = await this.prisma.comment.findMany({
+      where,
+      select: { id: true },
+      orderBy: { createdAt: 'asc' },
+      take: limit,
+    });
+
+    const ids = pending.map((c) => c.id);
+    const alreadyAnalyzed = 0;
+    const analyzed = ids.length > 0 ? await this.analyzeComments(ids) : [];
+
+this.logger.log(`Análisis automático de comentarios: ${analyzed.length}/${ids.length} pendientes (${pageId ?? 'todas las páginas'})`);
+    return { requested: ids.length, analyzed, alreadyAnalyzed };
   }
 
   /** Propone una acción de moderación sin ejecutarla. */

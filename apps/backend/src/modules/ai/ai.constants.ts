@@ -13,6 +13,9 @@ export const AI_MAX_TOKENS = 1024;
 export const AI_TEMPERATURE = 0.7;
 export const AI_TIMEOUT_MS = 60_000;
 
+/** Confianza mínima de IA para actuar automáticamente; por debajo → revisión humana. */
+export const CommentReviewThreshold = 80;
+
 export const POST_LENGTHS = ['short', 'medium', 'long'] as const;
 export type PostLength = (typeof POST_LENGTHS)[number];
 
@@ -62,12 +65,17 @@ export const COMMENT_REPLY_SYSTEM_PROMPT =
   '7) Devuelve SOLO el texto de la respuesta en español, sin comillas ni preámbulos.';
 
 export const ANALYZE_SYSTEM_PROMPT =
-  'Eres un analista de riesgo de comentarios en redes sociales. ' +
+  'Eres un analista de riesgo y clasificador de comentarios en redes sociales. ' +
   'Clasifica cada comentario y responde ÚNICAMENTE en JSON con este formato: ' +
-  '{"categoria":"NEUTRO|PELIGROSO|OPORTUNIDAD","sentimiento":"positivo|negativo|neutral","tema":"...","razon":"..."} ' +
-  'DEFINICIONES: PELIGROSO = spam agresivo, discurso de odio, acoso, lenguaje ofensivo, enlaces sospechosos o intento de fraude. ' +
-  'NEUTRO = comentario normal, pregunta o queja leve. ' +
-  'OPORTUNIDAD = interés de compra, pregunta comercial, potencial cliente o consulta que merece seguimiento. ' +
+  '{"categoria":"NEUTRO|PELIGROSO|OPORTUNIDAD","clasificacion":"NORMAL|INSULTO|PREGUNTA|SPAM|OPORTUNIDAD","confianza":87,"sentimiento":"positivo|negativo|neutral","tema":"...","razon":"..."} ' +
+  'DEFINICIONES categoria: PELIGROSO = spam agresivo, discurso de odio, acoso, lenguaje ofensivo, enlaces sospechosos o intento de fraude. ' +
+  'NEUTRO = comentario normal, pregunta o queja leve. OPORTUNIDAD = interés de compra, pregunta comercial, potencial cliente o consulta que merece seguimiento. ' +
+  'DEFINICIONES clasificacion: INSULTO = ofensa, insulto o discurso de odio dirigido. ' +
+  'PREGUNTA = pregunta directa que merece respuesta, comercial o no. ' +
+  'SPAM = enlace promocional no solicitado, anuncio o contenido repetido. ' +
+  'NORMAL = opinión, agradecimiento o comentario sin intención específica. ' +
+  'OPORTUNIDAD = potencial cliente, interés de compra o consulta comercial. ' +
+  '"confianza" es un entero 0-100 que mide tu certeza sobre la clasificación. ' +
   'No agregues texto fuera del JSON.';
 
 export const MODERATE_SYSTEM_PROMPT =
