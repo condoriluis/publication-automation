@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
-import { Plus, Trash2, Loader2 } from 'lucide-react';
+import { Plus, Trash2, Loader2, Sparkles } from 'lucide-react';
 
 import { api } from '@/lib/api';
 import type { Campaign, CampaignGroupInput, Paginated, PageListRow } from '@/lib/types';
@@ -13,6 +13,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
+import { DateTimePicker } from '@/components/ui/date-time-picker';
 import { EmptyState } from '@/components/empty-state';
 
 interface GroupDraft {
@@ -21,23 +24,35 @@ interface GroupDraft {
   waitAfterSeconds: string;
 }
 
-const EMPTY_GROUP: GroupDraft = { percentage: '', intervalSeconds: '10', waitAfterSeconds: '30' };
+const EMPTY_GROUP: GroupDraft = { percentage: '100', intervalSeconds: '10', waitAfterSeconds: '30' };
 
 export default function NewCampaignPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center"><Loader2 className="mx-auto size-6 animate-spin text-muted-foreground" /></div>}>
+      <NewCampaignContent />
+    </Suspense>
+  );
+}
+
+function NewCampaignContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [pages, setPages] = useState<Paginated<PageListRow> | null>(null);
   const [loading, setLoading] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [form, setForm] = useState({
     pageId: '',
     name: '',
     description: '',
-    contentTemplate: '',
+    contentTemplate: searchParams.get('content') || '',
     totalActions: '10',
     intervalSeconds: '5',
     groupsWaitSeconds: '1800',
     startAt: '',
     endsAt: '',
-    aiGenerated: false,
+    imageUrls: '',
+    videoUrl: '',
+    aiGenerated: searchParams.has('content'),
   });
   const [groups, setGroups] = useState<GroupDraft[]>([EMPTY_GROUP]);
 
@@ -81,6 +96,8 @@ export default function NewCampaignPage() {
         groupsWaitSeconds: Number(form.groupsWaitSeconds),
         startAt: new Date(form.startAt).toISOString(),
         endsAt: form.endsAt ? new Date(form.endsAt).toISOString() : undefined,
+        imageUrls: form.imageUrls ? form.imageUrls.split(',').map((u) => u.trim()) : undefined,
+        videoUrl: form.videoUrl || undefined,
         aiGenerated: form.aiGenerated,
       });
       toast.success('Campaña creada');
@@ -88,6 +105,30 @@ export default function NewCampaignPage() {
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudo crear la campaña');
       setLoading(false);
+    }
+  }
+
+  async function autocompleteWithAI() {
+    if (!form.pageId) return toast.error('Selecciona una página primero');
+    if (!form.name || form.name.length < 3) return toast.error('Escribe al menos 3 caracteres en el título');
+    setGenerating(true);
+    try {
+      const { config } = await api.post<{ success: boolean; config: { description: string; contentTemplate: string; intervalSeconds: number } }>('/ai/generate-campaign', {
+        pageId: form.pageId,
+        title: form.name,
+      });
+      setForm((f) => ({
+        ...f,
+        description: config.description || f.description,
+        contentTemplate: config.contentTemplate || f.contentTemplate,
+        intervalSeconds: config.intervalSeconds ? String(config.intervalSeconds) : f.intervalSeconds,
+        aiGenerated: true,
+      }));
+      toast.success('✨ IA completó la campaña automáticamente');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Error al generar la campaña');
+    } finally {
+      setGenerating(false);
     }
   }
 
@@ -103,18 +144,29 @@ export default function NewCampaignPage() {
             <CardContent className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2 sm:col-span-2">
                 <Label>Página</Label>
-                <select
-                  className="w-full rounded-md border bg-transparent px-3 py-2 text-sm"
-                  value={form.pageId}
-                  onChange={(e) => setForm({ ...form, pageId: e.target.value })}
-                  required
-                >
-                  {pages?.data.map((p) => <option key={p.id} value={p.id}>{p.name}</option>) ?? null}
-                </select>
+                <Select value={form.pageId} onValueChange={(val) => setForm({ ...form, pageId: val })} required>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Selecciona una página" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {pages?.data.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="name">Título</Label>
-                <Input id="name" minLength={3} maxLength={120} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+                <Label htmlFor="name">Título (Tema)</Label>
+                <div className="flex gap-2">
+                  <Input id="name" minLength={3} maxLength={120} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ej. Promoción de Invierno" className="flex-1" required />
+                  <Button type="button" variant="secondary" onClick={autocompleteWithAI} disabled={generating || !form.name}>
+                    {generating ? <Loader2 className="animate-spin size-4 mr-2" /> : <Sparkles className="size-4 mr-2 text-[#1877F2]" />}
+                    {generating ? 'Generando...' : 'Autocompletar'}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">Escribe de qué trata y dale a Autocompletar para que la IA llene el resto.</p>
               </div>
               <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor="desc">Descripción (opcional)</Label>
@@ -124,25 +176,35 @@ export default function NewCampaignPage() {
                 <Label htmlFor="content">Contenido base del post</Label>
                 <Textarea id="content" rows={4} value={form.contentTemplate} onChange={(e) => setForm({ ...form, contentTemplate: e.target.value })} required />
               </div>
-              <Field label="Acciones totales" hint="Máx. 10.000">
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="img">URLs de imágenes (separadas por coma, máx. 8)</Label>
+                <Input id="img" value={form.imageUrls} onChange={(e) => setForm({ ...form, imageUrls: e.target.value })} placeholder="https://…, https://…" />
+              </div>
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="vid">URL de video (opcional)</Label>
+                <Input id="vid" value={form.videoUrl} onChange={(e) => setForm({ ...form, videoUrl: e.target.value })} />
+              </div>
+              <Field label="Número de publicaciones" hint="Máx. 10.000">
                 <Input type="number" min={1} max={10000} value={form.totalActions} onChange={(e) => setForm({ ...form, totalActions: e.target.value })} required />
               </Field>
-              <Field label="Intervalo base (s)">
+              <Field label="Intervalo (seg)" hint="Espera entre posts">
                 <Input type="number" min={1} max={3600} value={form.intervalSeconds} onChange={(e) => setForm({ ...form, intervalSeconds: e.target.value })} required />
               </Field>
-              <Field label="Espera entre grupos (s)">
+              <Field label="Pausa grupos (seg)" hint="Descanso entre grupos">
                 <Input type="number" min={0} max={604800} value={form.groupsWaitSeconds} onChange={(e) => setForm({ ...form, groupsWaitSeconds: e.target.value })} required />
               </Field>
               <Field label="Inicio">
-                <Input type="datetime-local" value={form.startAt} onChange={(e) => setForm({ ...form, startAt: e.target.value })} required />
+                <DateTimePicker value={form.startAt} onChange={(val) => setForm({ ...form, startAt: val })} />
               </Field>
               <Field label="Fin (opcional)">
-                <Input type="datetime-local" value={form.endsAt} onChange={(e) => setForm({ ...form, endsAt: e.target.value })} />
+                <DateTimePicker value={form.endsAt} onChange={(val) => setForm({ ...form, endsAt: val })} />
               </Field>
-              <label className="flex items-center gap-2 text-sm sm:col-span-2">
-                <input type="checkbox" className="size-4" checked={form.aiGenerated} onChange={(e) => setForm({ ...form, aiGenerated: e.target.checked })} />
-                Contenido generado por IA
-              </label>
+              <div className="flex items-center space-x-2 sm:col-span-2 mt-2">
+                <Checkbox id="aiGenerated" checked={form.aiGenerated} onCheckedChange={(checked) => setForm({ ...form, aiGenerated: checked === true })} />
+                <Label htmlFor="aiGenerated" className="text-sm font-normal cursor-pointer">
+                  Contenido generado por IA
+                </Label>
+              </div>
             </CardContent>
           </Card>
 
@@ -155,19 +217,21 @@ export default function NewCampaignPage() {
             </CardHeader>
             <CardContent className="space-y-3">
               {groups.map((g, i) => (
-                <div key={i} className="flex flex-wrap items-end gap-3 rounded-lg border p-3">
-                  <span className="text-xs font-medium text-foreground/50">Grupo {i + 1}</span>
-                  <Field label="% acciones" hint="Suma = 100">
-                    <Input type="number" min={1} max={100} value={g.percentage} onChange={(e) => updateGroup(i, { percentage: e.target.value })} required />
-                  </Field>
-                  <Field label="Intervalo (s)">
-                    <Input type="number" min={1} max={3600} value={g.intervalSeconds} onChange={(e) => updateGroup(i, { intervalSeconds: e.target.value })} required />
-                  </Field>
-                  <Field label="Espera tras grupo (s)">
-                    <Input type="number" min={0} value={g.waitAfterSeconds} onChange={(e) => updateGroup(i, { waitAfterSeconds: e.target.value })} />
-                  </Field>
+                <div key={i} className="relative rounded-lg border p-4 pt-5">
+                  <span className="absolute -top-2.5 left-3 bg-card px-1 text-xs font-semibold text-muted-foreground">Grupo {i + 1}</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <Field label="% del total" hint={groups.length > 1 ? 'Suma debe ser 100' : '100 = todo'}>
+                      <Input type="number" min={1} max={100} value={g.percentage} placeholder="100" onChange={(e) => updateGroup(i, { percentage: e.target.value })} required />
+                    </Field>
+                    <Field label="Intervalo (s)" hint="Pausa entre posts">
+                      <Input type="number" min={1} max={3600} value={g.intervalSeconds} onChange={(e) => updateGroup(i, { intervalSeconds: e.target.value })} required />
+                    </Field>
+                    <Field label="Descanso (s)" hint="Pausa tras grupo">
+                      <Input type="number" min={0} value={g.waitAfterSeconds} onChange={(e) => updateGroup(i, { waitAfterSeconds: e.target.value })} />
+                    </Field>
+                  </div>
                   {groups.length > 1 ? (
-                    <Button type="button" size="sm" variant="ghost" className="ml-auto text-destructive" onClick={() => setGroups(groups.filter((_, j) => j !== i))}>
+                    <Button type="button" size="icon" variant="ghost" className="absolute top-1 right-1 size-7 text-muted-foreground hover:text-destructive" onClick={() => setGroups(groups.filter((_, j) => j !== i))}>
                       <Trash2 className="size-4" />
                     </Button>
                   ) : null}

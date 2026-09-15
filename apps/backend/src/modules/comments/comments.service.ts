@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import { Comment, CommentActionType, CommentStatus, LogCategory, Prisma } from '@prisma/client';
 
 import { AppLogger } from '../../common/logger/app-logger.service';
@@ -11,6 +11,7 @@ import { AuditService } from '../audit/audit.service';
 import { CommentFilterDto } from './dto/comment-filter.dto';
 import { ReplyCommentDto } from './dto/reply-comment.dto';
 import { ModerateCommentDto } from './dto/moderate-comment.dto';
+import { FacebookGraphError } from '../facebook/facebook.service';
 
 export type CommentDetail = Comment & {
   post: { id: string; content: string; metaPermalinkUrl: string | null };
@@ -18,12 +19,6 @@ export type CommentDetail = Comment & {
   replies: Comment[];
 };
 
-/**
- * Sincronización y moderación de comentarios.
- * - La sincronización trae comentarios reales de la Graph API (solo lectura).
- * - reply / moderate ejecutan acciones directas en Meta y registran audit + CommentAction.
- * - autoReply genera (IA) y envía la respuesta de forma síncrona vía executor.
- */
 @Injectable()
 export class CommentsService {
   constructor(
@@ -34,7 +29,7 @@ export class CommentsService {
     private readonly pagination: PaginationHelper,
     private readonly audit: AuditService,
     private readonly logger: AppLogger,
-  ) {}
+  ) { }
 
   // ---------------------------------------------------------------------------
   // Consulta
@@ -197,14 +192,36 @@ export class CommentsService {
   async moderate(userId: string, id: string, dto: ModerateCommentDto): Promise<CommentDetail> {
     const comment = await this.requireComment(userId, id);
 
+    const fbAction = async () => {
+      if (dto.action === 'hide') {
+        await this.facebook.setCommentHidden(comment.metaCommentId, comment.pageId, true);
+      } else if (dto.action === 'unhide') {
+        await this.facebook.setCommentHidden(comment.metaCommentId, comment.pageId, false);
+      } else {
+        await this.facebook.deleteComment(comment.metaCommentId, comment.pageId);
+      }
+    };
+
+    try {
+      await fbAction();
+    } catch (err) {
+      if (err instanceof FacebookGraphError) {
+        const status = (err as { status?: number }).status;
+        const isPermission = status === 403 || status === 400;
+        throw new UnprocessableEntityException(
+          isPermission
+            ? `Facebook rechazó la acción "${dto.action}": permisos insuficientes. Asegúrate de que tu app de Meta tenga aprobado el permiso pages_manage_engagement.`
+            : `Facebook devolvió un error al ${dto.action === 'delete' ? 'eliminar' : 'moderar'} el comentario: ${err.message}`,
+        );
+      }
+      throw err;
+    }
+
     if (dto.action === 'hide') {
-      await this.facebook.setCommentHidden(comment.metaCommentId, comment.pageId, true);
       await this.recordAction(id, userId, CommentActionType.HIDE, {});
     } else if (dto.action === 'unhide') {
-      await this.facebook.setCommentHidden(comment.metaCommentId, comment.pageId, false);
       await this.recordAction(id, userId, CommentActionType.UNHIDE, {});
     } else {
-      await this.facebook.deleteComment(comment.metaCommentId, comment.pageId);
       await this.recordAction(id, userId, CommentActionType.DELETE, {});
     }
 

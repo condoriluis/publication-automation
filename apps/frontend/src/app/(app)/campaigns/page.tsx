@@ -1,43 +1,53 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { Copy, Play, Pause, RotateCcw, X, Plus, Trash2 } from 'lucide-react';
+import { type ColumnDef } from '@tanstack/react-table';
 
 import { api } from '@/lib/api';
 import { StatusBadge } from '@/components/status-badge';
 import { PageHeader } from '@/components/page-header';
-import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { EmptyState } from '@/components/empty-state';
-import { LoadingRows, Pagination } from '@/components/pagination';
+import { LoadingRows } from '@/components/pagination';
+import { DataTable } from '@/components/ui/data-table';
 import { formatDate, formatPercent } from '@/lib/utils';
 import type { Campaign, CampaignStatus, Paginated } from '@/lib/types';
 
 const STATUSES: (CampaignStatus | '')[] = ['', 'DRAFT', 'SCHEDULED', 'RUNNING', 'PAUSED', 'COMPLETED', 'FAILED', 'CANCELLED'];
 
 export default function CampaignsPage() {
-  const [data, setData] = useState<Paginated<Campaign> | null>(null);
-  const [page, setPage] = useState(1);
+  const [data, setData] = useState<Campaign[] | null>(null);
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [campaignToDelete, setCampaignToDelete] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const q = status ? `&status=${status}` : '';
     api
-      .get<Paginated<Campaign>>(`/campaigns?page=${page}&limit=10${q}`)
-      .then(setData)
+      .get<Paginated<Campaign>>(`/campaigns?page=1&limit=100${q}`)
+      .then((res) => setData(res.data))
       .catch((e) => setError(e instanceof Error ? e.message : 'No se pudieron cargar las campañas'));
-  }, [page, status]);
+  }, [status]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  // Refresco automático mientras exista alguna campaña activa en la lista.
-  const hasActive = (data?.data ?? []).some((c) =>
+  const hasActive = (data ?? []).some((c) =>
     ['SCHEDULED', 'RUNNING', 'PAUSED'].includes(c.status),
   );
   useEffect(() => {
@@ -78,83 +88,143 @@ export default function CampaignsPage() {
     [load],
   );
 
+  const columns: ColumnDef<Campaign>[] = [
+    {
+      accessorKey: 'name',
+      header: 'Campaña',
+      cell: ({ row }) => {
+        const c = row.original;
+        return (
+          <div className="flex flex-col">
+            <Link href={`/campaigns/${c.id}`} className="font-medium text-[var(--foreground)] hover:text-[var(--primary)] hover:underline">
+              {c.name}
+            </Link>
+            <span className="text-xs text-[var(--muted-foreground)]">
+              {c.pageId ? `Página ${c.pageId.slice(0, 8)}…` : '—'} · Inicio {formatDate(c.startAt)}
+            </span>
+          </div>
+        );
+      },
+    },
+    {
+      id: 'progress',
+      header: 'Progreso',
+      cell: ({ row }) => {
+        const c = row.original;
+        const progress = c.totalActions > 0 ? c.actionsDone / c.totalActions : 0;
+        return (
+          <div className="w-[180px] sm:w-[220px]">
+            <div className="flex justify-between text-xs mb-1 text-[var(--muted-foreground)]">
+              <span>{c.actionsDone}/{c.totalActions} acciones</span>
+              <span className="font-medium">{formatPercent(progress)}</span>
+            </div>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--muted)]">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${c.status === 'FAILED' ? 'bg-[var(--destructive)]' : 'bg-[#1877F2]'}`}
+                style={{ width: `${Math.min(100, progress * 100)}%` }}
+              />
+            </div>
+            {c.actionsFailed > 0 && (
+              <p className="mt-1 text-[10px] text-[var(--destructive)]">{c.actionsFailed} fallidas</p>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: 'status',
+      header: 'Estado',
+      cell: ({ row }) => <StatusBadge value={row.original.status} />,
+    },
+    {
+      id: 'actions',
+      header: 'Acciones',
+      cell: ({ row }) => {
+        const c = row.original;
+        return (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {c.status === 'DRAFT' || c.status === 'SCHEDULED' || c.status === 'PAUSED' ? (
+              <IconBtn title="Iniciar" disabled={busy !== null} onClick={() => void run(c.id, 'start')}><Play /></IconBtn>
+            ) : null}
+            {c.status === 'RUNNING' ? (
+              <IconBtn title="Pausar" disabled={busy !== null} onClick={() => void run(c.id, 'pause')}><Pause /></IconBtn>
+            ) : null}
+            {c.status === 'PAUSED' ? (
+              <IconBtn title="Reanudar" disabled={busy !== null} onClick={() => void run(c.id, 'resume')}><RotateCcw /></IconBtn>
+            ) : null}
+            {['DRAFT', 'SCHEDULED', 'RUNNING', 'PAUSED'].includes(c.status) ? (
+              <IconBtn title="Cancelar" disabled={busy !== null} onClick={() => void run(c.id, 'cancel')}><X /></IconBtn>
+            ) : null}
+            <IconBtn title="Duplicar" disabled={busy !== null} onClick={() => void run(c.id, 'duplicate')}><Copy /></IconBtn>
+            {c.status === 'DRAFT' ? (
+              <IconBtn title="Eliminar" disabled={busy !== null} onClick={() => setCampaignToDelete(c.id)}>
+                <Trash2 className="text-[var(--destructive)]" />
+              </IconBtn>
+            ) : null}
+          </div>
+        );
+      },
+    },
+  ];
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <PageHeader title="Campañas" subtitle="Automatiza publicaciones por grupos y porcentajes">
-        <Button asChild>
+        <Button asChild className="bg-[#1877F2] hover:bg-[#0A5BC4] text-white">
           <Link href="/campaigns/new">
-            <Plus className="size-4" /> Nueva campaña
+            <Plus className="mr-1.5 size-4" /> Nueva campaña
           </Link>
         </Button>
       </PageHeader>
 
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap gap-2">
         {STATUSES.map((s) => (
-          <Button key={s || 'all'} size="sm" variant={status === s ? 'default' : 'outline'} onClick={() => { setStatus(s); setPage(1); }}>
+          <Button
+            key={s || 'all'}
+            size="sm"
+            variant={status === s ? 'default' : 'outline'}
+            onClick={() => setStatus(s)}
+            className={status === s ? 'bg-[#1877F2] text-white hover:bg-[#0A5BC4]' : ''}
+          >
             {s || 'Todas'}
           </Button>
         ))}
       </div>
 
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      {error ? <p className="text-sm text-[var(--destructive)]">{error}</p> : null}
 
       {data === null && !error ? (
-        <LoadingRows />
-      ) : data && data.data.length === 0 ? (
+        <LoadingRows rows={4} />
+      ) : data && data.length === 0 ? (
         <EmptyState title="No hay campañas" description="Crea tu primera campaña automatizada." />
       ) : data ? (
-        <Card>
-          <ul className="divide-y">
-            {data.data.map((c) => {
-              const progress = c.totalActions > 0 ? c.actionsDone / c.totalActions : 0;
-              return (
-                <li key={c.id} className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center">
-                  <div className="min-w-0 flex-1">
-                    <Link href={`/campaigns/${c.id}`} className="text-sm font-medium hover:text-primary">
-                      {c.name}
-                    </Link>
-                    <p className="truncate text-xs text-foreground/50">
-                      {c.pageId ? `Página ${c.pageId.slice(0, 8)}…` : '—'} · Inicio {formatDate(c.startAt)}
-                    </p>
-                    <div className="mt-2 h-1.5 w-full max-w-xs overflow-hidden rounded-full bg-muted">
-                      <div
-                        className={`h-full rounded-full ${c.status === 'FAILED' ? 'bg-destructive' : 'bg-primary'}`}
-                        style={{ width: `${Math.min(100, progress * 100)}%` }}
-                      />
-                    </div>
-                    <p className="mt-1 text-xs text-foreground/60">
-                      {c.actionsDone}/{c.totalActions} acciones · {formatPercent(progress)}
-                      {c.actionsFailed > 0 ? <> · <span className="text-destructive">{c.actionsFailed} fallidas</span></> : null}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <StatusBadge value={c.status} />
-                    {c.status === 'DRAFT' || c.status === 'SCHEDULED' || c.status === 'PAUSED' ? (
-                      <IconBtn title="Iniciar" disabled={busy !== null} onClick={() => void run(c.id, 'start')}><Play /></IconBtn>
-                    ) : null}
-                    {c.status === 'RUNNING' ? (
-                      <IconBtn title="Pausar" disabled={busy !== null} onClick={() => void run(c.id, 'pause')}><Pause /></IconBtn>
-                    ) : null}
-                    {c.status === 'PAUSED' ? (
-                      <IconBtn title="Reanudar" disabled={busy !== null} onClick={() => void run(c.id, 'resume')}><RotateCcw /></IconBtn>
-                    ) : null}
-                    {['DRAFT', 'SCHEDULED', 'RUNNING', 'PAUSED'].includes(c.status) ? (
-                      <IconBtn title="Cancelar" disabled={busy !== null} onClick={() => void run(c.id, 'cancel')}><X /></IconBtn>
-                    ) : null}
-                    <IconBtn title="Duplicar" disabled={busy !== null} onClick={() => void run(c.id, 'duplicate')}><Copy /></IconBtn>
-                    {c.status === 'DRAFT' ? (
-                      <IconBtn title="Eliminar" disabled={busy !== null} onClick={() => void remove(c.id)}>
-                        <Trash2 />
-                      </IconBtn>
-                    ) : null}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-          <Pagination data={data} onPage={setPage} />
-        </Card>
+        <DataTable columns={columns} data={data} />
       ) : null}
+
+      <AlertDialog open={!!campaignToDelete} onOpenChange={(open) => !open && setCampaignToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar campaña?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción no se puede deshacer. La campaña será eliminada permanentemente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-[var(--destructive)] text-[var(--destructive-foreground)] hover:bg-[var(--destructive)]/90"
+              onClick={() => {
+                if (campaignToDelete) {
+                  void remove(campaignToDelete);
+                  setCampaignToDelete(null);
+                }
+              }}
+            >
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -164,10 +234,10 @@ function IconBtn({ title, children, ...props }: React.ButtonHTMLAttributes<HTMLB
     <button
       type="button"
       title={title}
-      className="inline-flex size-8 items-center justify-center rounded-md border p-1.5 text-foreground/70 transition-colors hover:bg-muted disabled:opacity-40"
+      className="inline-flex size-8 items-center justify-center rounded-md border bg-[var(--card)] p-1.5 text-[var(--foreground)] transition-colors hover:bg-[var(--muted)] hover:text-[#1877F2] disabled:opacity-40 disabled:hover:text-inherit"
       {...props}
     >
-      {children}
+      <span className="size-4 [&>svg]:size-4">{children}</span>
     </button>
   );
 }

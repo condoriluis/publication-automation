@@ -5,6 +5,7 @@ import { Toaster } from 'sonner';
 import { cn } from '@/lib/utils';
 import { LayoutProvider } from '@/components/layout-provider';
 import '@/app/globals.css';
+import 'react-big-calendar/lib/css/react-big-calendar.css';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
 
@@ -20,8 +21,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#f8fafc' },
-    { media: '(prefers-color-scheme: dark)', color: '#0a0c12' },
+    { media: '(prefers-color-scheme: light)', color: '#F0F2F5' },
+    { media: '(prefers-color-scheme: dark)', color: '#18191A' },
   ],
   width: 'device-width',
   initialScale: 1,

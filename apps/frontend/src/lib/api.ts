@@ -3,32 +3,36 @@ const API_URL =
 const TOKEN_KEY = 'pa.accessToken';
 const REFRESH_KEY = 'pa.refreshToken';
 
+function getCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+  if (match) return match[2] ?? null;
+  return null;
+}
+
+function setCookie(name: string, value: string, maxAgeDays: number): void {
+  if (typeof document === 'undefined') return;
+  const maxAge = maxAgeDays * 24 * 60 * 60;
+  document.cookie = `${name}=${value};path=/;max-age=${maxAge};SameSite=Lax`;
+}
+
+function deleteCookie(name: string): void {
+  if (typeof document === 'undefined') return;
+  document.cookie = `${name}=;path=/;expires=Thu, 01 Jan 1970 00:00:01 GMT`;
+}
+
 export function getAccessToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    return window.localStorage.getItem(TOKEN_KEY);
-  } catch {
-    return null;
-  }
+  return getCookie(TOKEN_KEY);
 }
 
 export function getRefreshToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    return window.localStorage.getItem(REFRESH_KEY);
-  } catch {
-    return null;
-  }
+  return getCookie(REFRESH_KEY);
 }
 
 export function saveTokens(access: string, refresh?: string): void {
-  try {
-    window.localStorage.setItem(TOKEN_KEY, access);
-    if (refresh) window.localStorage.setItem(REFRESH_KEY, refresh);
-    if (!refresh) window.localStorage.removeItem(REFRESH_KEY);
-  } catch {
-    /* sin almacenamiento */
-  }
+  setCookie(TOKEN_KEY, access, 7); // 7 days (the refresh token's lifespan)
+  if (refresh) setCookie(REFRESH_KEY, refresh, 7);
+  else deleteCookie(REFRESH_KEY);
 }
 
 /** Alias compatible con el contexto de sesión. */
@@ -39,12 +43,8 @@ export function setTokensData(access: string, refresh?: string): void {
 }
 
 export function clearTokens(): void {
-  try {
-    window.localStorage.removeItem(TOKEN_KEY);
-    window.localStorage.removeItem(REFRESH_KEY);
-  } catch {
-    /* sin almacenamiento */
-  }
+  deleteCookie(TOKEN_KEY);
+  deleteCookie(REFRESH_KEY);
 }
 
 /** Alias compatible con el contexto de sesión. */

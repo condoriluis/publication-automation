@@ -393,10 +393,12 @@ export class FacebookService {
 
     try {
       const token = this.crypto.decrypt(account.accessTokenEncrypted);
-      await this.request('POST', `/${account.facebookUserId}/permissions`, {
+      // La API de Meta requiere DELETE /{userId}/permissions para revocar todos los permisos
+      await this.request('DELETE', `/${account.facebookUserId}/permissions`, {
         params: { access_token: token },
       });
     } catch (err) {
+      // Best-effort: si el token ya expiró o fue revocado, la cuenta igual se desconecta en BD
       this.logger.warn(`No se pudo revocar el access token de ${accountId}: ${(err as Error).message}`);
     }
 

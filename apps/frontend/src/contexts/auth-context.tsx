@@ -35,7 +35,7 @@ interface AuthContextValue {
   isLoading: boolean;
   setSession: (result: AuthResult) => void;
   clearSession: () => void;
-  login: (email: string, password: string) => Promise<User>;
+  login: (email: string, password: string, recaptchaToken?: string) => Promise<User>;
   register: (payload: RegisterPayload) => Promise<User>;
   logout: () => Promise<void>;
   refresh: () => Promise<boolean>;
@@ -47,25 +47,18 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
-/**
- * Provider de sesión. Hidrata el usuario con POST /auth/me al montar
- * si existe un access token guardado y centraliza login/register/logout.
- */
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
-  // El token se lee en un efecto (no durante el render) para que el SSR y el
-  // primer render del cliente produzcan exactamente el mismo HTML (hydration-safe).
+
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // Lectura inicial del token guardado (solo cliente).
   useEffect(() => {
     const token = getAccessToken();
     setAccessToken(token);
     setIsLoading(Boolean(token));
   }, []);
 
-  // Hidratación del perfil al montar.
   useEffect(() => {
     let cancelled = false;
     if (!accessToken) {
@@ -81,7 +74,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
       })
       .catch(() => {
         if (cancelled) return;
-        // Token inválido y sin refresh válido: cerrar sesión local.
         setUser(null);
         setAccessToken(null);
         clearStoredSession();
@@ -108,10 +100,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
   const login = useCallback(
-    async (email: string, password: string): Promise<User> => {
+    async (email: string, password: string, recaptchaToken?: string): Promise<User> => {
       const result = await apiClient.post<AuthResult>(
         '/auth/login',
-        { email, password },
+        { email, password, recaptchaToken },
         { auth: false },
       );
       setSession(result);
@@ -140,7 +132,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         await apiClient.post('/auth/logout', { refreshToken });
       }
     } catch {
-      // Si el logout falla en red, se limpia la sesión local igualmente.
+
     } finally {
       clearSession();
     }
@@ -165,7 +157,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
   return <AuthProviderContext.Provider value={value}>{children}</AuthProviderContext.Provider>;
 }
 
-/** Hook de acceso a la sesión. Debe usarse dentro de `<AuthProvider>`. */
 export function useAuthAdmin(): AuthContextValue {
   const ctx = useContext(AuthProviderContext);
   if (!ctx) {

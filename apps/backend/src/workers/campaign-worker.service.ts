@@ -6,6 +6,7 @@ import { Campaign, CampaignStatus, GroupStatus, PostStatus } from '@prisma/clien
 import { AppLogger } from '../common/logger/app-logger.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CampaignExecutorService } from './campaign-executor.service';
+import { AiService } from '../modules/ai/ai.service';
 
 interface GroupRow {
   id: string;
@@ -18,14 +19,6 @@ interface GroupRow {
   campaign: Campaign;
 }
 
-/**
- * Worker de campañas sin cola externa.
- *
- * Cada tick reclama grupos "debidos" (nextRunAt vencido y sin lease activo)
- * con un updateMany condicional —el claim es atómico, por lo que tantos
- * procesos como se levanten pueden ejecutarlo sin duplicar acciones— y
- * ejecuta exactamente una unidad de trabajo por grupo reclamado.
- */
 @Injectable()
 export class CampaignWorkerService {
   private static readonly INTERVAL_MS = 5_000;
@@ -39,6 +32,7 @@ export class CampaignWorkerService {
     private readonly executor: CampaignExecutorService,
     private readonly config: ConfigService,
     private readonly logger: AppLogger,
+    private readonly aiService: AiService,
   ) {
     this.leaseMs = toInt(this.config.get<string>('WORKER_LEASE_MS'), 60_000);
     this.maxAttempts = toInt(this.config.get<string>('WORKER_MAX_ATTEMPTS'), 5);
@@ -72,8 +66,6 @@ export class CampaignWorkerService {
       select: { id: true },
     });
 
-    // Los grupos se reclaman secuencialmente: cada claim es atómico y los
-    // demás procesos competirán por los grupos que no hayamos tomado.
     for (const { id } of due) {
       if (!(await this.tryClaim(id, now))) continue;
       try {
@@ -170,9 +162,7 @@ export class CampaignWorkerService {
         await this.executor.markCampaignFailure(group.campaignId, 'Demasiados fallos permanentes al publicar');
         return;
       }
-      // Un fallo permanente se cuenta solo y no se reintenta ese post (queda
-      // FAILED); el grupo avanza al siguiente. Si el error es sistemático y
-      // aún no hubo éxitos, la campaña se marca FAILED al superar intentos.
+
       await this.prisma.campaignGroup.update({
         where: { id: groupId },
         data: { attempts: { increment: 1 }, nextRunAt: new Date(now + 2_000), leaseExpiresAt: null },
@@ -180,7 +170,6 @@ export class CampaignWorkerService {
       return;
     }
 
-    // already-published / skipped: se reintenta en el próximo tick.
     await this.prisma.campaignGroup.update({
       where: { id: groupId },
       data: { nextRunAt: new Date(now + 5_000), leaseExpiresAt: null },
@@ -196,13 +185,41 @@ export class CampaignWorkerService {
 
     for (let i = 0; i < group.actionsTarget; i++) {
       const dedupeKey = `campaign:${group.campaignId}:${group.id}:${i}:${group.campaign.pageId}`;
+
+      // Chequear primero si ya existe para no gastar tokens de IA en vano
+      const existing = await this.prisma.post.findFirst({ where: { dedupeKey } });
+      if (existing) {
+        created += 1;
+        continue;
+      }
+
+      let content = group.campaign.contentTemplate;
+
+      // Si la campaña tiene IA activada, generamos un post nuevo dinámicamente
+      if (group.campaign.aiGenerated) {
+        try {
+          const page = await this.prisma.page.findUnique({ where: { id: group.campaign.pageId } });
+          if (page) {
+            this.logger.debug(`Generando post dinámico con IA para el grupo ${group.id}`);
+            content = await this.aiService.generatePostText({
+              page,
+              theme: group.campaign.contentTemplate,
+              length: 'medium',
+            });
+          }
+        } catch (err) {
+          this.logger.error(`Error generando post con IA en la campaña automatizada: ${err instanceof Error ? err.message : String(err)}`);
+          // Hacemos un fallo silencioso aquí para usar el contentTemplate original en lugar de bloquear todo
+        }
+      }
+
       try {
         await this.prisma.post.create({
           data: {
             campaignId: group.campaignId,
             userId: group.campaign.userId,
             pageId: group.campaign.pageId,
-            content: group.campaign.contentTemplate,
+            content,
             imageUrls: (group.campaign.imageUrls as string[] | null) ?? [],
             videoUrl: group.campaign.videoUrl,
             status: PostStatus.SCHEDULED,

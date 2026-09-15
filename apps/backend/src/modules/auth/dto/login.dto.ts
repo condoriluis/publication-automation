@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsEmail, IsNotEmpty, IsString, MaxLength, ValidateIf } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsOptional, IsString, MaxLength, ValidateIf } from 'class-validator';
 
 export class LoginDto {
   @ValidateIf((o) => !o.username)
@@ -15,4 +15,8 @@ export class LoginDto {
   @IsString()
   @IsNotEmpty({ message: 'La contraseña es obligatoria' })
   password!: string;
+
+  @IsOptional()
+  @IsString()
+  recaptchaToken?: string;
 }

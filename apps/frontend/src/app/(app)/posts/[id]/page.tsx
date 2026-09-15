@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { ArrowLeft, Play, X, Trash2, ExternalLink, RefreshCw, Loader2 } from 'lucide-react';
+import { ArrowLeft, Play, X, Trash2, ExternalLink, RefreshCw, Loader2,
+  MessageSquare, ThumbsUp, Share2, Eye, TrendingUp, Bot, CheckCircle2, Clock,
+} from 'lucide-react';
 
 import { api } from '@/lib/api';
 import type { PostDetail } from '@/lib/types';
@@ -13,6 +15,10 @@ import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/status-badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatDate } from '@/lib/utils';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 export default function PostDetailPage() {
   const params = useParams<{ id: string }>();
@@ -21,14 +27,15 @@ export default function PostDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const load = useCallback(() => {
-    api.get<PostDetail>(`/posts/${params.id}`).then(setPost).catch((e) => setError(e instanceof Error ? e.message : 'No se pudo cargar la publicación'));
+    api.get<PostDetail>(`/posts/${params.id}`)
+      .then(setPost)
+      .catch((e) => setError(e instanceof Error ? e.message : 'No se pudo cargar la publicación'));
   }, [params.id]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
   const action = useCallback(
     async (act: string, del = false) => {
@@ -36,7 +43,11 @@ export default function PostDetailPage() {
       try {
         if (del) await api.delete(`/posts/${params.id}`);
         else await api.post(`/posts/${params.id}/${act}`);
-        toast.success('Acción ejecutada');
+        const toastMap: Record<string, string> = {
+          publish: 'Publicación enviada a Facebook',
+          cancel: 'Publicación cancelada',
+        };
+        toast.success(del ? 'Publicación eliminada' : (toastMap[act] ?? 'Acción ejecutada'));
         if (del) router.push('/posts');
         else await load();
       } catch (e) {
@@ -52,7 +63,8 @@ export default function PostDetailPage() {
     setSyncing(true);
     try {
       const res = await api.post<{ synced: number; skipped: number }>(`/comments/sync/${params.id}`);
-      toast.success(`${res.synced} comentarios nuevos, ${res.skipped} ya respondidos`);
+      toast.success(`${res.synced} comentarios nuevos sincronizados`);
+      await load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'No se pudo sincronizar');
     } finally {
@@ -61,86 +73,163 @@ export default function PostDetailPage() {
   }
 
   if (error) return <p className="text-sm text-destructive">{error}</p>;
-  if (!post) return <div className="space-y-4"><Skeleton className="h-8 w-64" /><Skeleton className="h-40" /></div>;
+  if (!post) return <LoadingSkeleton />;
 
   const e = post.engagement;
+  const isPublished = post.status === 'PUBLISHED';
+  const commentCount = post._count?.comments ?? 0;
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Detalle de la publicación" subtitle={post.id.slice(0, 8)}>
-        <Button size="sm" variant="outline" onClick={() => router.push('/posts')}>
-          <ArrowLeft className="size-4" /> Volver
-        </Button>
+      {/* Header */}
+      <PageHeader title={post.campaign?.name ?? 'Publicación'} subtitle={`Publicado el ${post.publishedAt ? formatDate(post.publishedAt) : '—'}`}>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="outline" onClick={() => router.push('/posts')}>
+            <ArrowLeft className="size-4" /> Volver
+          </Button>
+          {post.metaPermalinkUrl ? (
+            <Button size="sm" variant="outline" asChild>
+              <a href={post.metaPermalinkUrl} target="_blank" rel="noopener noreferrer">
+                <ExternalLink className="size-4" /> Ver en Facebook
+              </a>
+            </Button>
+          ) : null}
+        </div>
       </PageHeader>
 
-      <Card>
-        <CardContent className="space-y-4 pt-6">
-          <div className="flex flex-wrap items-center gap-2">
-            <StatusBadge value={post.status} />
-            {post.aiGenerated ? <span className="rounded bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400">IA</span> : null}
-            <span className="text-xs text-foreground/50">{post.page?.name}</span>
-          </div>
-          <p className="whitespace-pre-wrap text-sm leading-relaxed">{post.content}</p>
-          {post.imageUrls.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
-              {post.imageUrls.map((u) => (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img key={u} src={u} alt="" className="h-24 w-24 rounded-lg object-cover" />
-              ))}
+      <div className="grid gap-4 lg:grid-cols-5">
+        {/* Left: post preview + meta */}
+        <div className="space-y-4 lg:col-span-3">
+          {/* Post preview card styled as Facebook */}
+          <Card className="overflow-hidden">
+            <div className="flex items-center gap-3 border-b bg-muted/30 px-4 py-3">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#1877F2] text-sm font-bold text-white">
+                {(post.page?.name ?? 'P').slice(0, 2).toUpperCase()}
+              </div>
+              <div>
+                <p className="text-sm font-semibold">{post.page?.name ?? 'Página'}</p>
+                <p className="flex items-center gap-1 text-xs text-foreground/50">
+                  {post.publishedAt ? formatDate(post.publishedAt) : '—'} · Facebook
+                </p>
+              </div>
+              <div className="ml-auto flex items-center gap-2">
+                <StatusBadge value={post.status} />
+                {post.aiGenerated ? (
+                  <span className="flex items-center gap-1 rounded-full bg-[#1877F2]/10 px-2.5 py-1 text-[11px] font-medium text-[#1877F2]">
+                    <Bot className="size-3" /> IA
+                  </span>
+                ) : null}
+              </div>
             </div>
-          ) : null}
-          <dl className="grid gap-2 text-sm sm:grid-cols-2">
-            <InfoRow label="Campaña" value={post.campaign?.name ?? '—'} />
-            <InfoRow label="Programado" value={post.scheduledFor ? formatDate(post.scheduledFor) : '—'} />
-            <InfoRow label="Publicado" value={post.publishedAt ? formatDate(post.publishedAt) : '—'} />
-            <InfoRow label="Actualizado" value={formatDate(post.statusChangedAt)} />
-            <InfoRow label="Comentarios" value={String(post._count?.comments ?? 0)} />
-          </dl>
-        </CardContent>
-      </Card>
+            <CardContent className="pt-4 flex flex-col items-center">
+              <div className="w-full mb-3 text-left">
+                <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground/90">{post.content}</p>
+              </div>
+              
+              {post.videoUrl ? (
+                <div className="w-full flex justify-center mt-2">
+                  <video src={post.videoUrl} controls className="max-h-[400px] w-full rounded-lg object-cover" />
+                </div>
+              ) : post.imageUrls && post.imageUrls.length > 0 ? (
+                <div className={`mt-2 w-full grid gap-2 ${post.imageUrls.length === 1 ? 'grid-cols-1 place-items-center' : 'grid-cols-2'}`}>
+                  {post.imageUrls.map((u) => (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img key={u} src={u} alt="" className={`w-full rounded-lg object-cover ${post.imageUrls.length === 1 ? 'max-h-[400px] object-contain' : ''}`} />
+                  ))}
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
 
-      <div className="flex flex-wrap gap-2">
-        {['DRAFT', 'SCHEDULED', 'FAILED'].includes(post.status) ? (
-          <Button size="sm" disabled={busy !== null} onClick={() => void action('publish')}>
-            {busy === 'publish' ? <Loader2 className="animate-spin" /> : <Play className="size-4" />} Publicar
-          </Button>
-        ) : null}
-        {['DRAFT', 'SCHEDULED', 'PUBLISHING'].includes(post.status) ? (
-          <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void action('cancel')}><X className="size-4" /> Cancelar</Button>
-        ) : null}
-        {post.status === 'DRAFT' ? (
-          <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void action('', true)}><Trash2 className="size-4" /> Eliminar</Button>
-        ) : null}
-        {post.status === 'PUBLISHED' || post.status === 'PARTIALLY_FAILED' ? (
-          <Button size="sm" variant="outline" disabled={syncing} onClick={() => void syncComments()}>
-            <RefreshCw className={syncing ? 'animate-spin' : 'size-4'} /> Sincronizar comentarios
-          </Button>
-        ) : null}
-        {post.metaPermalinkUrl ? (
-          <Button size="sm" variant="outline" asChild>
-            <a href={post.metaPermalinkUrl} target="_blank" rel="noopener noreferrer">
-              <ExternalLink className="size-4" /> Ver en Facebook
-            </a>
-          </Button>
-        ) : null}
+          {/* Action buttons */}
+          <div className="flex flex-wrap gap-2">
+            {['DRAFT', 'SCHEDULED', 'FAILED'].includes(post.status) ? (
+              <Button size="sm" disabled={busy !== null} onClick={() => void action('publish')}>
+                {busy === 'publish' ? <Loader2 className="animate-spin size-4" /> : <Play className="size-4" />} Publicar ahora
+              </Button>
+            ) : null}
+            {['DRAFT', 'SCHEDULED', 'PUBLISHING'].includes(post.status) ? (
+              <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void action('cancel')}>
+                <X className="size-4" /> Cancelar
+              </Button>
+            ) : null}
+            {post.status === 'DRAFT' ? (
+              <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" disabled={busy !== null} onClick={() => setConfirmDelete(true)}>
+                <Trash2 className="size-4" /> Eliminar
+              </Button>
+            ) : null}
+            {isPublished ? (
+              <Button size="sm" variant="outline" disabled={syncing} onClick={() => void syncComments()}>
+                <RefreshCw className={`size-4 ${syncing ? 'animate-spin' : ''}`} />
+                {syncing ? 'Sincronizando…' : 'Sincronizar comentarios'}
+              </Button>
+            ) : null}
+          </div>
+        </div>
+
+        {/* Right: info + engagement */}
+        <div className="space-y-4 lg:col-span-2">
+          {/* Metadata */}
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-sm">Información</CardTitle></CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <InfoRow label="Campaña" value={post.campaign?.name ?? '—'} />
+              <InfoRow label="Programado" value={post.scheduledFor ? formatDate(post.scheduledFor) : '—'} />
+              <InfoRow label="Publicado" value={post.publishedAt ? formatDate(post.publishedAt) : '—'} />
+              <InfoRow label="Última actualización" value={formatDate(post.statusChangedAt)} />
+              <div className="flex items-center justify-between pt-1 border-t">
+                <span className="text-foreground/60">Comentarios</span>
+                <span className="flex items-center gap-1.5 font-medium">
+                  {commentCount > 0 ? (
+                    <CheckCircle2 className="size-3.5 text-emerald-500" />
+                  ) : (
+                    <Clock className="size-3.5 text-foreground/30" />
+                  )}
+                  {commentCount}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Engagement */}
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-sm">Engagement</CardTitle></CardHeader>
+            <CardContent>
+              {!e ? (
+                <div className="flex flex-col items-center gap-2 py-4 text-center">
+                  <TrendingUp className="size-8 text-foreground/20" />
+                  <p className="text-xs text-foreground/50">
+                    {isPublished ? 'Sin métricas aún. Vuelve en unos minutos.' : 'Disponible después de publicar.'}
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <EngagementStat icon={<ThumbsUp className="size-4 text-[#1877F2]" />} label="Me gusta" value={e.likes} />
+                  <EngagementStat icon={<MessageSquare className="size-4 text-emerald-500" />} label="Comentarios" value={e.comments} />
+                  <EngagementStat icon={<Share2 className="size-4 text-purple-500" />} label="Compartidos" value={e.shares} />
+                  <EngagementStat icon={<Eye className="size-4 text-amber-500" />} label="Alcance" value={e.reach} />
+                  <EngagementStat icon={<TrendingUp className="size-4 text-rose-500" />} label="Impresiones" value={e.impressions} />
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
-      <Card>
-        <CardHeader><CardTitle className="text-base">Engagement</CardTitle></CardHeader>
-          <CardContent>
-            {!e ? (
-              <p className="text-sm text-foreground/60">Sin métricas disponibles.</p>
-            ) : (
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-                <Metric label="Me gusta" value={e.likes} />
-                <Metric label="Comentarios" value={e.comments} />
-                <Metric label="Compartidos" value={e.shares} />
-                <Metric label="Alcance" value={e.reach} />
-                <Metric label="Impresiones" value={e.impressions} />
-              </div>
-            )}
-          </CardContent>
-      </Card>
+      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar publicación?</AlertDialogTitle>
+            <AlertDialogDescription>Se eliminará permanentemente. Esta acción no se puede deshacer.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => { setConfirmDelete(false); void action('', true); }}>
+              Sí, eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -154,11 +243,29 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Metric({ label, value }: { label: string; value: number }) {
+function EngagementStat({ icon, label, value }: { icon: React.ReactNode; label: string; value: number }) {
   return (
-    <div className="rounded-lg border p-3">
-      <p className="text-xs text-foreground/60">{label}</p>
-      <p className="mt-1 text-lg font-semibold">{value.toLocaleString('es')}</p>
+    <div className="flex flex-col gap-1 rounded-lg border p-3">
+      <div className="flex items-center gap-1.5 text-xs text-foreground/60">{icon}{label}</div>
+      <p className="text-xl font-bold">{value.toLocaleString('es')}</p>
+    </div>
+  );
+}
+
+function LoadingSkeleton() {
+  return (
+    <div className="space-y-4">
+      <Skeleton className="h-8 w-64" />
+      <div className="grid gap-4 lg:grid-cols-5">
+        <div className="space-y-4 lg:col-span-3">
+          <Skeleton className="h-64" />
+          <Skeleton className="h-9 w-48" />
+        </div>
+        <div className="space-y-4 lg:col-span-2">
+          <Skeleton className="h-40" />
+          <Skeleton className="h-48" />
+        </div>
+      </div>
     </div>
   );
 }

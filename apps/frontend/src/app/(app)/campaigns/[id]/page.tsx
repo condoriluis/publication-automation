@@ -3,7 +3,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Play, Pause, RotateCcw, X, Copy, ArrowLeft } from 'lucide-react';
+import {
+  Play, Pause, RotateCcw, X, Copy, ArrowLeft, CheckCircle2,
+  XCircle, Clock, Zap, Shield, Bot, Timer, ChevronRight,
+  Trash2,
+} from 'lucide-react';
 
 import { api } from '@/lib/api';
 import type { CampaignProgress } from '@/lib/types';
@@ -13,6 +17,71 @@ import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/status-badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatDate } from '@/lib/utils';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+
+// ─── Countdown hook ─────────────────────────────────────────────────────────
+function useCountdown(intervalSeconds: number, isRunning: boolean) {
+  const [remaining, setRemaining] = useState(intervalSeconds);
+  useEffect(() => {
+    if (!isRunning) { setRemaining(intervalSeconds); return; }
+    setRemaining(intervalSeconds);
+    const tick = window.setInterval(() => {
+      setRemaining((r) => {
+        if (r <= 1) { return intervalSeconds; }
+        return r - 1;
+      });
+    }, 1000);
+    return () => window.clearInterval(tick);
+  }, [isRunning, intervalSeconds]);
+  return remaining;
+}
+
+// ─── Facebook post preview ────────────────────────────────────────────────────
+function PostPreview({ text, pageName, status }: { text: string; pageName: string; status: string }) {
+  const isPublished = status === 'PUBLISHED';
+  const isFailed = status === 'FAILED';
+  return (
+    <div className={`rounded-xl border bg-card p-4 transition-all ${isPublished ? 'border-emerald-500/40 bg-emerald-500/5' : isFailed ? 'border-destructive/30 bg-destructive/5' : 'border-border'}`}>
+      <div className="flex items-start gap-3">
+        {/* Avatar */}
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#1877F2] text-xs font-bold text-white">
+          {pageName.slice(0, 2).toUpperCase()}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold">{pageName}</span>
+            <span className="text-[10px] text-foreground/40">· Facebook</span>
+          </div>
+          <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-foreground/80 line-clamp-4">{text}</p>
+        </div>
+        <div className="shrink-0">
+          {isPublished ? (
+            <CheckCircle2 className="size-5 text-emerald-500" />
+          ) : isFailed ? (
+            <XCircle className="size-5 text-destructive" />
+          ) : (
+            <Clock className="size-4 text-foreground/30" />
+          )}
+        </div>
+      </div>
+      {isPublished && (
+        <div className="mt-2 flex items-center gap-1 border-t border-emerald-500/20 pt-2">
+          <CheckCircle2 className="size-3 text-emerald-500" />
+          <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">Publicado</span>
+        </div>
+      )}
+      {isFailed && (
+        <div className="mt-2 flex items-center gap-1 border-t border-destructive/20 pt-2">
+          <XCircle className="size-3 text-destructive" />
+          <span className="text-[11px] font-medium text-destructive">Fallido</span>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function CampaignDetailPage() {
   const params = useParams<{ id: string }>();
@@ -20,6 +89,8 @@ export default function CampaignDetailPage() {
   const [data, setData] = useState<CampaignProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const load = useCallback(() => {
     api
@@ -28,11 +99,8 @@ export default function CampaignDetailPage() {
       .catch((e) => setError(e instanceof Error ? e.message : 'No se pudo cargar la campaña'));
   }, [params.id]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
-  // Refresco automático mientras la campaña esté activa (SCHEDULED/RUNNING/PAUSED).
   const isActive = ['SCHEDULED', 'RUNNING', 'PAUSED'].includes(data?.campaign.status ?? '');
   useEffect(() => {
     if (!isActive) return;
@@ -40,101 +108,276 @@ export default function CampaignDetailPage() {
     return () => window.clearInterval(timer);
   }, [isActive, load]);
 
-  const run = useCallback(
-    async (action: string) => {
-      setBusy(action);
-      try {
-        await api.post(`/campaigns/${params.id}/${action}`);
-        toast.success(`Campaña ${action}`);
-        await load();
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : 'Acción fallida');
-      } finally {
-        setBusy(null);
-      }
-    },
-    [params.id, load],
-  );
+  const run = useCallback(async (action: string) => {
+    setBusy(action);
+    try {
+      await api.post(`/campaigns/${params.id}/${action}`);
+      toast.success(`Acción completada`);
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Acción fallida');
+    } finally {
+      setBusy(null);
+    }
+  }, [params.id, load]);
+
+  async function deleteCampaign() {
+    setBusy('delete');
+    try {
+      await api.delete(`/campaigns/${params.id}`);
+      toast.success('Campaña eliminada');
+      router.push('/campaigns');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo eliminar');
+      setBusy(null);
+    }
+  }
+
+  const countdown = useCountdown(data?.campaign.intervalSeconds ?? 5, data?.campaign.status === 'RUNNING');
 
   if (error) return <p className="text-sm text-destructive">{error}</p>;
   if (!data) return <LoadingSkeleton />;
 
   const c = data.campaign;
   const progress = c.totalActions > 0 ? c.actionsDone / c.totalActions : 0;
+  const pct = Math.min(100, Math.round(progress * 100));
+  const isRunning = c.status === 'RUNNING';
+  const isDone = ['COMPLETED', 'CANCELLED', 'FAILED'].includes(c.status);
+
+  // Posts simulados desde groups para el feed de vista previa
+  const publishedCount = data.postsDone;
+  const failedCount = data.postsFailed;
+  const pendingCount = data.postsTotal - publishedCount - failedCount;
 
   return (
     <div className="space-y-4">
-      <PageHeader title={c.name} subtitle={`${c.id.slice(0, 8)}… · creada ${formatDate(c.createdAt)}`}>
-        <Button size="sm" variant="outline" onClick={() => router.push('/campaigns')}>
-          <ArrowLeft className="size-4" /> Volver
-        </Button>
+      {/* Header */}
+      <PageHeader title={c.name} subtitle={`Creada ${formatDate(c.createdAt)}`}>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={() => router.push('/campaigns')}>
+            <ArrowLeft className="size-4" /> Volver
+          </Button>
+          {isDone && (
+            <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => setConfirmDelete(true)}>
+              <Trash2 className="size-4" /> Eliminar
+            </Button>
+          )}
+        </div>
       </PageHeader>
 
+      {/* Status bar */}
       <Card>
-        <CardContent className="flex flex-wrap items-center justify-between gap-4 pt-6">
-          <div className="flex items-center gap-3">
+        <CardContent className="flex flex-wrap items-center justify-between gap-4 pt-5 pb-5">
+          <div className="flex flex-wrap items-center gap-3">
             <StatusBadge value={c.status} />
-            {c.errorMessage ? <p className="text-xs text-destructive">{c.errorMessage}</p> : null}
+            {/* Safe mode badge */}
+            <span className="flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+              <Shield className="size-3" /> Modo seguro activo
+            </span>
+            {c.aiGenerated && (
+              <span className="flex items-center gap-1 rounded-full border border-[#1877F2]/30 bg-[#1877F2]/10 px-2.5 py-1 text-xs font-medium text-[#1877F2]">
+                <Bot className="size-3" /> Generado con IA
+              </span>
+            )}
+            {/* Live countdown */}
+            {isRunning && (
+              <span className="flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-600 dark:text-amber-400">
+                <Timer className="size-3 animate-pulse" /> Próxima publicación en {countdown}s
+              </span>
+            )}
           </div>
-          <div className="flex gap-1.5">
-            {['DRAFT', 'SCHEDULED', 'PAUSED'].includes(c.status) ? (
-              <Button size="sm" disabled={busy !== null} onClick={() => void run('start')}><Play className="size-4" /> Iniciar</Button>
-            ) : null}
-            {c.status === 'RUNNING' ? (
-              <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void run('pause')}><Pause className="size-4" /> Pausar</Button>
-            ) : null}
-            {c.status === 'PAUSED' ? (
-              <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void run('resume')}><RotateCcw className="size-4" /> Reanudar</Button>
-            ) : null}
-            {['DRAFT', 'SCHEDULED', 'RUNNING', 'PAUSED'].includes(c.status) ? (
-              <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void run('cancel')}><X className="size-4" /> Cancelar</Button>
-            ) : null}
-            <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void run('duplicate')}><Copy className="size-4" /> Duplicar</Button>
+          <div className="flex flex-wrap gap-1.5">
+            {['DRAFT', 'SCHEDULED', 'PAUSED'].includes(c.status) && (
+              <Button size="sm" disabled={busy !== null} onClick={() => void run('start')}>
+                <Play className="size-4" /> Iniciar
+              </Button>
+            )}
+            {c.status === 'RUNNING' && (
+              <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void run('pause')}>
+                <Pause className="size-4" /> Pausar
+              </Button>
+            )}
+            {c.status === 'PAUSED' && (
+              <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void run('resume')}>
+                <RotateCcw className="size-4" /> Reanudar
+              </Button>
+            )}
+            {['DRAFT', 'SCHEDULED', 'RUNNING', 'PAUSED'].includes(c.status) && (
+              <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => setConfirmCancel(true)}>
+                <X className="size-4" /> Cancelar
+              </Button>
+            )}
+            <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void run('duplicate')}>
+              <Copy className="size-4" /> Duplicar
+            </Button>
           </div>
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader><CardTitle className="text-base">Progreso</CardTitle></CardHeader>
-          <CardContent>
-            <div className="h-3 w-full overflow-hidden rounded-full bg-muted">
-              <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${Math.min(100, progress * 100)}%` }} />
-            </div>
-            <div className="mt-3 grid grid-cols-3 gap-3 text-sm">
-              <Stat label="Publicados" value={String(data.postsDone)} />
-              <Stat label="Fallidos" value={String(data.postsFailed)} />
-              <Stat label="Total posts" value={String(data.postsTotal)} />
-            </div>
-            <dl className="mt-4 space-y-1 text-sm">
-              <Row label="Inicio" value={formatDate(c.startAt)} />
-              <Row label="Fin" value={c.endsAt ? formatDate(c.endsAt) : '—'} />
-              <Row label="Acciones" value={`${c.actionsDone}/${c.totalActions}`} />
-              <Row label="Intervalo" value={`${c.intervalSeconds}s`} />
-              <Row label="Espera entre grupos" value={`${c.groupsWaitSeconds}s`} />
-              <Row label="IA" value={c.aiGenerated ? 'Sí' : 'No'} />
-            </dl>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader><CardTitle className="text-base">Grupos</CardTitle></CardHeader>
-          <CardContent className="space-y-2">
-            {data.groups.length === 0 ? <p className="text-sm text-foreground/60">Sin grupos.</p> : null}
-            {data.groups.map((g) => (
-              <div key={g.id} className="rounded-lg border p-3 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium">{g.name}</span>
-                  <StatusBadge value={g.status} />
+      <div className="grid gap-4 lg:grid-cols-5">
+        {/* Left: Progress + Details */}
+        <div className="space-y-4 lg:col-span-2">
+          {/* Progress card */}
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-sm">Progreso general</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              {/* Big progress bar */}
+              <div>
+                <div className="mb-1.5 flex items-end justify-between text-xs">
+                  <span className="text-foreground/60">{c.actionsDone} de {c.totalActions} publicaciones</span>
+                  <span className="font-semibold text-foreground">{pct}%</span>
                 </div>
-                <p className="mt-1 text-xs text-foreground/60">
-                  {g.percentage}% · cada {g.intervalSeconds}s · {g.actionsDone}/{g.actionsTarget} acciones
-                </p>
+                <div className="h-3 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className={`h-full rounded-full transition-all duration-700 ${isRunning ? 'bg-[#1877F2]' : c.status === 'COMPLETED' ? 'bg-emerald-500' : c.status === 'FAILED' ? 'bg-destructive' : 'bg-primary'}`}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
               </div>
-            ))}
-          </CardContent>
-        </Card>
+
+              {/* Stats */}
+              <div className="grid grid-cols-3 gap-2">
+                <StatCard label="Publicados" value={publishedCount} icon={<CheckCircle2 className="size-4 text-emerald-500" />} color="emerald" />
+                <StatCard label="Fallidos" value={failedCount} icon={<XCircle className="size-4 text-destructive" />} color="red" />
+                <StatCard label="Pendientes" value={pendingCount} icon={<Clock className="size-4 text-foreground/40" />} color="neutral" />
+              </div>
+
+              {/* Details */}
+              <dl className="space-y-2 border-t pt-3 text-sm">
+                <Row label="Inicio" value={formatDate(c.startAt)} />
+                <Row label="Fin" value={c.endsAt ? formatDate(c.endsAt) : '—'} />
+                <Row label="Intervalo entre posts" value={`${c.intervalSeconds}s`} />
+                <Row label="Pausa entre grupos" value={`${c.groupsWaitSeconds}s`} />
+              </dl>
+            </CardContent>
+          </Card>
+
+          {/* Groups */}
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-sm">Grupos de distribución</CardTitle></CardHeader>
+            <CardContent className="space-y-2">
+              {data.groups.length === 0 ? (
+                <p className="text-sm text-foreground/60">Sin grupos configurados.</p>
+              ) : data.groups.map((g, i) => {
+                const gPct = g.actionsTarget > 0 ? Math.round((g.actionsDone / g.actionsTarget) * 100) : 0;
+                return (
+                  <div key={g.id} className="rounded-lg border p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Grupo {i + 1}</span>
+                      <StatusBadge value={g.status} />
+                    </div>
+                    <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                      <div className="h-full rounded-full bg-[#1877F2] transition-all" style={{ width: `${gPct}%` }} />
+                    </div>
+                    <p className="mt-1.5 flex items-center gap-1.5 text-xs text-foreground/60">
+                      <Zap className="size-3" /> {g.actionsDone}/{g.actionsTarget} posts
+                      <ChevronRight className="size-3" />
+                      {g.percentage}% de la campaña
+                      <ChevronRight className="size-3" />
+                      cada {g.intervalSeconds}s
+                    </p>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Right: Post feed preview */}
+        <div className="lg:col-span-3">
+          <Card className="h-full">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                Vista previa del contenido
+                <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-normal text-foreground/50">
+                  {publishedCount} publicados · {pendingCount} pendientes
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 max-h-[600px] overflow-y-auto pr-2">
+              {/* Published posts */}
+              {Array.from({ length: publishedCount }).map((_, i) => (
+                <PostPreview
+                  key={`pub-${i}`}
+                  text={c.contentTemplate}
+                  pageName={c.pageId.slice(0, 8)}
+                  status="PUBLISHED"
+                />
+              ))}
+              {/* Failed posts */}
+              {Array.from({ length: failedCount }).map((_, i) => (
+                <PostPreview
+                  key={`fail-${i}`}
+                  text={c.contentTemplate}
+                  pageName={c.pageId.slice(0, 8)}
+                  status="FAILED"
+                />
+              ))}
+              {/* Pending posts */}
+              {Array.from({ length: Math.min(pendingCount, 3) }).map((_, i) => (
+                <PostPreview
+                  key={`pend-${i}`}
+                  text={c.contentTemplate}
+                  pageName={c.pageId.slice(0, 8)}
+                  status="PENDING"
+                />
+              ))}
+              {pendingCount > 3 && (
+                <p className="py-2 text-center text-xs text-foreground/40">
+                  + {pendingCount - 3} publicaciones pendientes
+                </p>
+              )}
+              {data.postsTotal === 0 && (
+                <p className="py-8 text-center text-sm text-foreground/40">
+                  Las publicaciones aparecerán aquí una vez que inicie la campaña.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
+
+      {/* Cancel confirm */}
+      <AlertDialog open={confirmCancel} onOpenChange={setConfirmCancel}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Cancelar campaña?</AlertDialogTitle>
+            <AlertDialogDescription>Esta acción detendrá la campaña permanentemente. No se podrá reanudar.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>No, mantener</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => { setConfirmCancel(false); void run('cancel'); }}>
+              Sí, cancelar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete confirm */}
+      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar campaña?</AlertDialogTitle>
+            <AlertDialogDescription>Se eliminará permanentemente y no podrá recuperarse.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => { setConfirmDelete(false); void deleteCampaign(); }}>
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+function StatCard({ label, value, icon, color }: { label: string; value: number; icon: React.ReactNode; color: 'emerald' | 'red' | 'neutral' }) {
+  const bg = color === 'emerald' ? 'bg-emerald-500/10 border-emerald-500/20' : color === 'red' ? 'bg-destructive/10 border-destructive/20' : 'bg-muted/50 border-border';
+  return (
+    <div className={`rounded-lg border p-3 ${bg}`}>
+      <div className="flex items-center gap-1.5 text-xs text-foreground/60">{icon}{label}</div>
+      <p className="mt-1 text-2xl font-bold">{value}</p>
     </div>
   );
 }
@@ -148,23 +391,17 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border p-3">
-      <p className="text-xs text-foreground/60">{label}</p>
-      <p className="mt-1 text-xl font-semibold">{value}</p>
-    </div>
-  );
-}
-
 function LoadingSkeleton() {
   return (
     <div className="space-y-4">
       <Skeleton className="h-8 w-64" />
-      <Skeleton className="h-24" />
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Skeleton className="h-64" />
-        <Skeleton className="h-64" />
+      <Skeleton className="h-16" />
+      <div className="grid gap-4 lg:grid-cols-5">
+        <div className="space-y-4 lg:col-span-2">
+          <Skeleton className="h-64" />
+          <Skeleton className="h-40" />
+        </div>
+        <Skeleton className="h-[500px] lg:col-span-3" />
       </div>
     </div>
   );

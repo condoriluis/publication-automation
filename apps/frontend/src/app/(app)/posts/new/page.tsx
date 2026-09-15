@@ -13,6 +13,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
+import { DateTimePicker } from '@/components/ui/date-time-picker';
 import { EmptyState } from '@/components/empty-state';
 
 export default function NewPostPage() {
@@ -100,20 +103,41 @@ export default function NewPostPage() {
             <CardContent className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Página</Label>
-                <select className="w-full rounded-md border bg-transparent px-3 py-2 text-sm" value={form.pageId} onChange={(e) => setForm({ ...form, pageId: e.target.value, campaignId: '' })} required>
-                  {pages?.data.map((p) => <option key={p.id} value={p.id}>{p.name}</option>) ?? null}
-                </select>
+                <Select value={form.pageId} onValueChange={(val) => setForm({ ...form, pageId: val, campaignId: '' })} required>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Selecciona una página" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {pages?.data.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label>Campaña (opcional)</Label>
-                <select className="w-full rounded-md border bg-transparent px-3 py-2 text-sm" value={form.campaignId} onChange={(e) => setForm({ ...form, campaignId: e.target.value })}>
-                  <option value="">Sin campaña</option>
-                  {pageCampaigns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
+                <Select value={form.campaignId} onValueChange={(val) => setForm({ ...form, campaignId: val === 'none' ? '' : val })}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Sin campaña" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sin campaña</SelectItem>
+                    {pageCampaigns.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor="content">Contenido</Label>
                 <Textarea id="content" rows={6} value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} required />
+                <p className="text-[11px] text-muted-foreground">
+                  <strong>Tip IA:</strong> Escribe un tema específico (ej. "Agentes de IA") para guiar a la IA. Si lo dejas en blanco y haces clic en "Generar con IA", se creará un post general basado en la categoría de tu página.
+                </p>
               </div>
               <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor="img">URLs de imágenes (separadas por coma, máx. 8)</Label>
@@ -125,12 +149,14 @@ export default function NewPostPage() {
               </div>
               <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor="sched">Programar para (vacío = borrador)</Label>
-                <Input id="sched" type="datetime-local" value={form.scheduledFor} onChange={(e) => setForm({ ...form, scheduledFor: e.target.value })} />
+                <DateTimePicker value={form.scheduledFor} onChange={(val) => setForm({ ...form, scheduledFor: val })} />
               </div>
-              <label className="flex items-center gap-2 text-sm sm:col-span-2">
-                <input type="checkbox" className="size-4" checked={form.aiGenerated} onChange={(e) => setForm({ ...form, aiGenerated: e.target.checked })} />
-                Marcado como generado por IA
-              </label>
+              <div className="flex items-center space-x-2 sm:col-span-2 mt-2">
+                <Checkbox id="aiGenerated" checked={form.aiGenerated} onCheckedChange={(checked) => setForm({ ...form, aiGenerated: checked === true })} />
+                <Label htmlFor="aiGenerated" className="text-sm font-normal cursor-pointer">
+                  Marcado como generado por IA
+                </Label>
+              </div>
             </CardContent>
             <CardFooter>
               <Button type="submit" disabled={loading} className="w-full">

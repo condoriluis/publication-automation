@@ -3,63 +3,87 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ExternalLink } from 'lucide-react';
+import { type ColumnDef } from '@tanstack/react-table';
 
 import { api } from '@/lib/api';
 import type { Paginated, PostDetail } from '@/lib/types';
 import { PageHeader } from '@/components/page-header';
-import { Card } from '@/components/ui/card';
 import { StatusBadge } from '@/components/status-badge';
 import { EmptyState } from '@/components/empty-state';
-import { LoadingRows, Pagination } from '@/components/pagination';
+import { LoadingRows } from '@/components/pagination';
+import { DataTable } from '@/components/ui/data-table';
 import { formatDate } from '@/lib/utils';
 
 export default function HistoryPage() {
-  const [data, setData] = useState<Paginated<PostDetail> | null>(null);
-  const [page, setPage] = useState(1);
+  const [data, setData] = useState<PostDetail[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    api.get<Paginated<PostDetail>>(`/posts?page=${page}&limit=10&status=PUBLISHED`).then(setData).catch((e) => setError(e instanceof Error ? e.message : 'No se pudo cargar el historial'));
-  }, [page]);
+    api
+      .get<Paginated<PostDetail>>(`/posts?page=1&limit=100&status=PUBLISHED`)
+      .then((res) => setData(res.data))
+      .catch((e) => setError(e instanceof Error ? e.message : 'No se pudo cargar el historial'));
+  }, []);
 
   useEffect(() => {
     void load();
   }, [load]);
 
+  const columns: ColumnDef<PostDetail>[] = [
+    {
+      accessorKey: 'content',
+      header: 'Publicación',
+      cell: ({ row }) => {
+        const p = row.original;
+        return (
+          <div className="flex flex-col gap-1 max-w-[400px]">
+            <Link href={`/posts/${p.id}`} className="font-medium text-[var(--foreground)] hover:text-[#1877F2] hover:underline truncate">
+              {p.content || '(Sin contenido)'}
+            </Link>
+            <span className="text-xs text-[var(--muted-foreground)]">
+              {p.page?.name ?? '—'} · publicado {p.publishedAt ? formatDate(p.publishedAt) : formatDate(p.statusChangedAt)}
+            </span>
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: 'status',
+      header: 'Estado',
+      cell: ({ row }) => <StatusBadge value={row.original.status} />,
+    },
+    {
+      id: 'actions',
+      header: 'Enlace',
+      cell: ({ row }) => {
+        const p = row.original;
+        if (!p.metaPermalinkUrl) return null;
+        return (
+          <a
+            href={p.metaPermalinkUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Ver en Facebook"
+            className="inline-flex size-8 items-center justify-center rounded-md text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)] hover:text-[#1877F2]"
+          >
+            <ExternalLink className="size-4" />
+          </a>
+        );
+      },
+    },
+  ];
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <PageHeader title="Historial" subtitle="Publicaciones publicadas a lo largo del tiempo" />
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      {error ? <p className="text-sm text-[var(--destructive)]">{error}</p> : null}
+      
       {data === null && !error ? (
-        <LoadingRows />
-      ) : data && data.data.length === 0 ? (
+        <LoadingRows rows={4} />
+      ) : data && data.length === 0 ? (
         <EmptyState title="Sin publicaciones" description="Aún no hay posts publicados." />
       ) : data ? (
-        <Card>
-          <ul className="divide-y">
-            {data.data.map((p) => (
-              <li key={p.id} className="flex items-center gap-3 p-4">
-                <div className="min-w-0 flex-1">
-                  <Link href={`/posts/${p.id}`} className="text-sm font-medium hover:text-primary">
-                    {p.content.slice(0, 90)}{p.content.length > 90 ? '…' : ''}
-                  </Link>
-                  <p className="mt-1 text-xs text-foreground/50">
-                    {p.page?.name ?? '—'} · publicado {p.publishedAt ? formatDate(p.publishedAt) : formatDate(p.statusChangedAt)}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <StatusBadge value={p.status} />
-                  {p.metaPermalinkUrl ? (
-                    <a href={p.metaPermalinkUrl} target="_blank" rel="noopener noreferrer" title="Ver en Facebook">
-                      <ExternalLink className="size-4 text-foreground/50" />
-                    </a>
-                  ) : null}
-                </div>
-              </li>
-            ))}
-          </ul>
-          <Pagination data={data} onPage={setPage} />
-        </Card>
+        <DataTable columns={columns} data={data} />
       ) : null}
     </div>
   );

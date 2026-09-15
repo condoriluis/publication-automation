@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Sparkles, Loader2, Bot } from 'lucide-react';
+import { Sparkles, Loader2, Bot, ArrowRight, ChevronDown, ChevronUp, Cpu } from 'lucide-react';
 
 import { api } from '@/lib/api';
 import type { CommentAnalysisResult, Paginated, PageListRow } from '@/lib/types';
@@ -12,14 +13,24 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StatusBadge } from '@/components/status-badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
 export default function AiPage() {
+  const router = useRouter();
   const [pages, setPages] = useState<Paginated<PageListRow> | null>(null);
   const [genForm, setGenForm] = useState({ pageId: '', theme: '', audience: '', tone: 'amigable', length: 'medium' as 'short' | 'medium' | 'long' });
   const [generating, setGenerating] = useState(false);
   const [generatedText, setGeneratedText] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [aiStatus, setAiStatus] = useState<{ provider: string; model: string; configured: boolean } | null>(null);
+
+  useEffect(() => {
+    api.get<{ provider: string; model: string; configured: boolean }>('/ai/status')
+      .then(setAiStatus)
+      .catch(() => {});
+  }, []);
 
   const [commentIds, setCommentIds] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
@@ -63,7 +74,20 @@ export default function AiPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Inteligencia" subtitle="Genera contenido y analiza comentarios con IA" />
+      <PageHeader title="Inteligencia" subtitle="Genera contenido y analiza comentarios con IA">
+        {aiStatus && (
+          <span className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium ${
+            aiStatus.configured
+              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+              : 'border-destructive/30 bg-destructive/10 text-destructive'
+          }`}>
+            <Cpu className="size-3" />
+            {aiStatus.configured ? (
+              <><span className="capitalize">{aiStatus.provider}</span> · <span className="font-mono text-[11px]">{aiStatus.model}</span></>
+            ) : 'IA no configurada'}
+          </span>
+        )}
+      </PageHeader>
 
       <Tabs defaultValue="generate">
         <TabsList>
@@ -78,35 +102,66 @@ export default function AiPage() {
               <CardContent className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Página</Label>
-                  <select className="w-full rounded-md border bg-transparent px-3 py-2 text-sm" value={genForm.pageId} onChange={(e) => setGenForm({ ...genForm, pageId: e.target.value })} required>
-                    {pages?.data.map((p) => <option key={p.id} value={p.id}>{p.name}</option>) ?? null}
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Tono</Label>
-                  <select className="w-full rounded-md border bg-transparent px-3 py-2 text-sm" value={genForm.tone} onChange={(e) => setGenForm({ ...genForm, tone: e.target.value })}>
-                    <option value="amigable">Amigable</option>
-                    <option value="formal">Formal</option>
-                    <option value="breve">Breve</option>
-                    <option value="neutral">Neutral</option>
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Extensión</Label>
-                  <select className="w-full rounded-md border bg-transparent px-3 py-2 text-sm" value={genForm.length} onChange={(e) => setGenForm({ ...genForm, length: e.target.value as 'short' | 'medium' | 'long' })}>
-                    <option value="short">Corto</option>
-                    <option value="medium">Medio</option>
-                    <option value="long">Largo</option>
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Público objetivo</Label>
-                  <Input value={genForm.audience} onChange={(e) => setGenForm({ ...genForm, audience: e.target.value })} placeholder="Ej. emprendedores jóvenes" />
+                  <Select value={genForm.pageId} onValueChange={(val) => setGenForm({ ...genForm, pageId: val })} required>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Selecciona una página" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {pages?.data.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2 sm:col-span-2">
-                  <Label>Tema / instrucción</Label>
-                  <Textarea rows={3} value={genForm.theme} onChange={(e) => setGenForm({ ...genForm, theme: e.target.value })} required placeholder="Describe el tema que quieres que aborde el post" />
+                  <Label>Tema / instrucción <span className="text-foreground/40 font-normal text-xs">(la IA decidirá el tono y la extensión)</span></Label>
+                  <Textarea rows={3} value={genForm.theme} onChange={(e) => setGenForm({ ...genForm, theme: e.target.value })} required placeholder="Ej. Promoción de fin de semana con 20% off en todos los servicios" />
                 </div>
+
+                <div className="sm:col-span-2">
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={() => setShowAdvanced((v) => !v)}
+                  >
+                    {showAdvanced ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+                    Opciones avanzadas (tono, extensión, público)
+                  </button>
+                </div>
+
+                {showAdvanced && (
+                  <>
+                    <div className="space-y-2">
+                      <Label>Tono</Label>
+                      <Select value={genForm.tone} onValueChange={(val) => setGenForm({ ...genForm, tone: val })}>
+                        <SelectTrigger className="w-full"><SelectValue placeholder="Selecciona un tono" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="amigable">Amigable</SelectItem>
+                          <SelectItem value="formal">Formal</SelectItem>
+                          <SelectItem value="breve">Breve</SelectItem>
+                          <SelectItem value="neutral">Neutral</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Extensión</Label>
+                      <Select value={genForm.length} onValueChange={(val) => setGenForm({ ...genForm, length: val as 'short' | 'medium' | 'long' })}>
+                        <SelectTrigger className="w-full"><SelectValue placeholder="Extensión" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="short">Corto</SelectItem>
+                          <SelectItem value="medium">Medio</SelectItem>
+                          <SelectItem value="long">Largo</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label>Público objetivo</Label>
+                      <Input value={genForm.audience} onChange={(e) => setGenForm({ ...genForm, audience: e.target.value })} placeholder="Ej. emprendedores jóvenes" />
+                    </div>
+                  </>
+                )}
               </CardContent>
               <CardFooter className="flex flex-wrap items-center gap-2">
                 <Button type="submit" disabled={generating}>
@@ -114,7 +169,12 @@ export default function AiPage() {
                   {generating ? 'Generando…' : 'Generar texto'}
                 </Button>
                 {generatedText ? (
-                  <Button type="button" variant="outline" onClick={() => { void navigator.clipboard.writeText(generatedText); toast.success('Texto copiado'); }}>Copiar al portapapeles</Button>
+                  <>
+                    <Button type="button" variant="outline" onClick={() => { void navigator.clipboard.writeText(generatedText); toast.success('Texto copiado'); }}>Copiar al portapapeles</Button>
+                    <Button type="button" variant="secondary" onClick={() => router.push(`/campaigns/new?content=${encodeURIComponent(generatedText)}`)}>
+                      Usar este texto <ArrowRight className="ml-1.5 size-3.5" />
+                    </Button>
+                  </>
                 ) : null}
               </CardFooter>
             </form>
@@ -148,19 +208,36 @@ export default function AiPage() {
           </Card>
 
           {results.length > 0 ? (
-            <Card>
-              <ul className="divide-y">
-                {results.map((r) => (
-                  <li key={r.commentId} className="flex items-start gap-3 p-4">
-                    <StatusBadge value={r.riskLevel} />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm">{r.message}</p>
-                      {r.explanation ? <p className="mt-1 text-xs text-foreground/60">{r.explanation}</p> : null}
+            <div className="space-y-3">
+              {results.map((r) => (
+                <Card key={r.commentId} className="overflow-hidden">
+                  <div className={`h-1 w-full ${
+                    r.riskLevel === 'HIGH' ? 'bg-red-500' :
+                    r.riskLevel === 'MEDIUM' ? 'bg-orange-400' :
+                    r.riskLevel === 'LOW' ? 'bg-emerald-500' : 'bg-muted'
+                  }`} />
+                  <CardContent className="pt-4 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <StatusBadge value={r.riskLevel} />
+                      {r.sentiment && (
+                        <span className="rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground capitalize">
+                          {r.sentiment}
+                        </span>
+                      )}
+                      {r.suggestedAction && r.suggestedAction !== 'none' && (
+                        <span className="rounded-full border px-2.5 py-0.5 text-[11px] font-medium">
+                          Acción sugerida: <strong>{r.suggestedAction}</strong>
+                        </span>
+                      )}
                     </div>
-                  </li>
-                ))}
-              </ul>
-            </Card>
+                    <p className="text-sm text-foreground/80 leading-relaxed border-l-2 border-muted pl-3 italic">"{r.message}"</p>
+                    {r.explanation && (
+                      <p className="text-xs text-foreground/55">{r.explanation}</p>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           ) : null}
         </TabsContent>
       </Tabs>

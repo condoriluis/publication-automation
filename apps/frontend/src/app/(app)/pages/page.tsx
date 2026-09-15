@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Link2, Unplug, RefreshCw } from 'lucide-react';
+import { type ColumnDef } from '@tanstack/react-table';
 
 import { api } from '@/lib/api';
 import type { Paginated, PageListRow, SafeFacebookAccount } from '@/lib/types';
@@ -11,13 +12,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/status-badge';
 import { EmptyState } from '@/components/empty-state';
-import { LoadingRows, Pagination } from '@/components/pagination';
+import { LoadingRows } from '@/components/pagination';
+import { DataTable } from '@/components/ui/data-table';
 import { formatDate } from '@/lib/utils';
 
 export default function PagesPage() {
   const [accounts, setAccounts] = useState<SafeFacebookAccount[] | null>(null);
-  const [pages, setPages] = useState<Paginated<PageListRow> | null>(null);
-  const [page, setPage] = useState(1);
+  const [pages, setPages] = useState<PageListRow[] | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -26,21 +27,20 @@ export default function PagesPage() {
     try {
       const [accs, list] = await Promise.all([
         api.get<SafeFacebookAccount[]>('/facebook/accounts'),
-        api.get<Paginated<PageListRow>>(`/pages?page=${page}&limit=10`),
+        api.get<Paginated<PageListRow>>(`/pages?page=1&limit=100`),
       ]);
       setAccounts(accs);
-      setPages(list);
+      setPages(list.data);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error al cargar páginas');
     }
-  }, [page]);
+  }, []);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  // Refresco automático cuando el popup de Facebook cierra el OAuth.
   useEffect(() => {
     const channel = new BroadcastChannel('pa-fb-oauth');
     const onMessage = (e: MessageEvent) => {
@@ -77,6 +77,49 @@ export default function PagesPage() {
       setDisconnecting(null);
     }
   }
+
+  // Columnas para la tabla dinámica
+  const columns: ColumnDef<PageListRow>[] = [
+    {
+      accessorKey: 'name',
+      header: 'Página',
+      cell: ({ row }) => {
+        const p = row.original;
+        return (
+          <div className="flex items-center gap-3">
+            {p.pictureUrl ? (
+
+              <img src={p.pictureUrl} alt={p.name} className="size-8 shrink-0 rounded-md object-cover" />
+            ) : (
+              <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-xs font-semibold text-foreground/60">
+                {p.name.slice(0, 1)}
+              </div>
+            )}
+            <span className="font-medium text-foreground">{p.name}</span>
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: 'category',
+      header: 'Categoría',
+      cell: ({ row }) => (
+        <span className="text-muted-foreground">{row.original.category ?? 'Sin categoría'}</span>
+      ),
+    },
+    {
+      accessorKey: 'followersCount',
+      header: 'Seguidores',
+      cell: ({ row }) => (
+        <span className="text-muted-foreground">{row.original.followersCount.toLocaleString('es')}</span>
+      ),
+    },
+    {
+      accessorKey: 'status',
+      header: 'Estado',
+      cell: ({ row }) => <StatusBadge value={row.original.status} />,
+    },
+  ];
 
   return (
     <div className="space-y-6">
@@ -127,40 +170,18 @@ export default function PagesPage() {
 
       <section>
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-medium text-foreground/70">Páginas</h3>
+          <h3 className="text-sm font-medium text-foreground/70">Páginas de Facebook</h3>
           <Button size="sm" variant="outline" onClick={() => void load()}>
             <RefreshCw className="size-3.5" /> Refrescar
           </Button>
         </div>
+
         {pages === null ? (
           <LoadingRows />
-        ) : pages.data.length === 0 ? (
+        ) : pages.length === 0 ? (
           <EmptyState title="Sin páginas" description="Conecta una cuenta para sincronizar sus páginas." />
         ) : (
-          <Card>
-            <ul className="divide-y">
-              {pages.data.map((p) => (
-                <li key={p.id} className="flex items-center gap-3 p-4">
-                  {p.pictureUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={p.pictureUrl} alt={p.name} className="size-10 rounded-lg object-cover" />
-                  ) : (
-                    <div className="flex size-10 items-center justify-center rounded-lg bg-muted text-sm font-semibold text-foreground/60">
-                      {p.name.slice(0, 1)}
-                    </div>
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{p.name}</p>
-                    <p className="truncate text-xs text-foreground/50">
-                      {p.category ?? 'Sin categoría'} · {p.followersCount.toLocaleString('es')} seguidores
-                    </p>
-                  </div>
-                  <StatusBadge value={p.status} />
-                </li>
-              ))}
-            </ul>
-            <Pagination data={pages} onPage={setPage} />
-          </Card>
+          <DataTable columns={columns} data={pages} />
         )}
       </section>
     </div>

@@ -1,13 +1,14 @@
-import { Body, Controller, NotFoundException, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, NotFoundException, Post, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Permissions } from '../../common/decorators/auth.decorators';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { PrismaService } from '../../prisma/prisma.service';
-import { AiService, CommentAnalysisResult } from './ai.service';
+import { AiService, CampaignConfigResult, CommentAnalysisResult } from './ai.service';
 import { GenerateCommentReplyDto } from './dto/generate-comment-reply.dto';
 import { GenerateTextDto } from './dto/generate-text.dto';
 import { AnalyzeCommentsDto } from './dto/analyze-comments.dto';
+import { GenerateCampaignDto } from './dto/generate-campaign.dto';
 
 @ApiTags('Inteligencia Artificial')
 @Controller('ai')
@@ -17,6 +18,18 @@ export class AiController {
     private readonly aiService: AiService,
     private readonly prisma: PrismaService,
   ) {}
+
+  @Get('status')
+  @Permissions('ai:use')
+  @ApiOperation({ summary: 'Devuelve el proveedor y modelo de IA activos (sin exponer la API key)' })
+  async getStatus(): Promise<{ provider: string; model: string; configured: boolean }> {
+    try {
+      const config = await this.aiService.getActiveConfig();
+      return { provider: config.provider, model: config.model, configured: Boolean(config.apiKey) };
+    } catch {
+      return { provider: 'Sin configurar', model: '—', configured: false };
+    }
+  }
 
   @Post('generate-post')
   @Permissions('ai:use')
@@ -39,6 +52,26 @@ export class AiController {
       length: dto.length,
     });
     return { success: true, text };
+  }
+
+  @Post('generate-campaign')
+  @Permissions('ai:use')
+  @ApiOperation({ summary: 'Genera configuración completa de campaña a partir del título' })
+  async generateCampaign(@Body() dto: GenerateCampaignDto): Promise<{ success: boolean; config: CampaignConfigResult }> {
+    const page = await this.prisma.page.findUnique({ where: { id: dto.pageId } });
+    if (!page) {
+      throw new NotFoundException('Página no encontrada');
+    }
+    const config = await this.aiService.generateCampaignConfig({
+      page: {
+        id: page.id,
+        name: page.name,
+        category: page.category,
+        description: page.description,
+      },
+      title: dto.title,
+    });
+    return { success: true, config };
   }
 
   @Post('comment-reply')

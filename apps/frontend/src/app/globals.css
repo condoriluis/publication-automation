@@ -2,116 +2,124 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Meta / Facebook brand palette ─────────────────────────────────────────
+   Primary blue : #1877F2 (Facebook brand blue)
+   Darker blue  : #0A5BC4
+   Light blue   : #E7F3FF
+   Background   : #F0F2F5 (Facebook light gray)
+   Card / white : #FFFFFF
+   Border       : #E4E6EB (Facebook border)
+   Text         : #050505 (Facebook near-black)
+   Muted text   : #65676B (Facebook secondary text)
+   Red          : #E02020
+   Green        : #31A24C
+   ────────────────────────────────────────────────────────────────────────── */
+
 :root {
-  --background: oklch(0.985 0.001 260);
-  --foreground: oklch(0.21 0.02 255);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.21 0.02 255);
-  --muted: oklch(0.955 0.005 255);
-  --muted-foreground: oklch(0.5 0.02 255);
-  --border: oklch(0.9 0.006 255);
-  --input: oklch(0.9 0.006 255);
-  --ring: oklch(0.55 0.1 262);
-  --primary: oklch(0.42 0.15 275);
-  --primary-foreground: oklch(0.99 0 0);
-  --accent: oklch(0.93 0.05 278);
-  --accent-foreground: oklch(0.3 0.1 278);
-  --secondary: oklch(0.95 0.003 255);
-  --secondary-foreground: oklch(0.4 0.01 255);
-  --destructive: oklch(0.58 0.23 25);
-  --destructive-foreground: oklch(0.99 0 0);
-  --success: oklch(0.55 0.13 148);
-  --warning: oklch(0.68 0.14 72);
-  --radius: 0.8rem;
+  --background:         #F0F2F5;
+  --foreground:         #050505;
+  --card:               #FFFFFF;
+  --card-foreground:    #050505;
+  --muted:              #F0F2F5;
+  --muted-foreground:   #65676B;
+  --border:             #E4E6EB;
+  --input:              #E4E6EB;
+  --ring:               #1877F2;
+  --primary:            #1877F2;
+  --primary-foreground: #FFFFFF;
+  --accent:             #E7F3FF;
+  --accent-foreground:  #0A5BC4;
+  --secondary:          #F2F2F2;
+  --secondary-foreground: #444950;
+  --destructive:        #E02020;
+  --destructive-foreground: #FFFFFF;
+  --success:            #31A24C;
+  --warning:            #F7B928;
+  --sidebar-bg:         #FFFFFF;
+  --sidebar-active:     #E7F3FF;
+  --sidebar-active-fg:  #1877F2;
+  --topbar-bg:          rgba(255, 255, 255, 0.90);
+  --radius:             0.75rem;
 }
 
 .dark {
-  --background: oklch(0.145 0.013 265);
-  --foreground: oklch(0.94 0.008 255);
-  --card: oklch(0.185 0.018 265);
-  --card-foreground: oklch(0.94 0.008 255);
-  --muted: oklch(0.24 0.02 265);
-  --muted-foreground: oklch(0.64 0.02 255);
-  --border: oklch(0.28 0.02 265);
-  --input: oklch(0.28 0.02 265);
-  --ring: oklch(0.65 0.12 262);
-  --primary: oklch(0.72 0.12 262);
-  --primary-foreground: oklch(0.14 0.02 265);
-  --accent: oklch(0.28 0.03 275);
-  --accent-foreground: oklch(0.9 0.02 275);
-  --secondary: oklch(0.3 0.02 260);
-  --secondary-foreground: oklch(0.9 0.01 260);
-  --destructive: oklch(0.64 0.2 25);
-  --destructive-foreground: oklch(0.15 0.02 20);
+  --background:         #18191A;
+  --foreground:         #E4E6EB;
+  --card:               #242526;
+  --card-foreground:    #E4E6EB;
+  --muted:              #3A3B3C;
+  --muted-foreground:   #B0B3B8;
+  --border:             #3E4042;
+  --input:              #3E4042;
+  --ring:               #2D88FF;
+  --primary:            #2D88FF;
+  --primary-foreground: #FFFFFF;
+  --accent:             #263951;
+  --accent-foreground:  #93BCEC;
+  --secondary:          #3A3B3C;
+  --secondary-foreground: #E4E6EB;
+  --destructive:        #F93939;
+  --destructive-foreground: #FFFFFF;
+  --success:            #3CBA5B;
+  --warning:            #F7B928;
+  --sidebar-bg:         #242526;
+  --sidebar-active:     #263951;
+  --sidebar-active-fg:  #2D88FF;
+  --topbar-bg:          rgba(36, 37, 38, 0.90);
 }
 
-* {
+/* ── Reset / Base ───────────────────────────────────────────────────────── */
+*, *::before, *::after {
   border-color: var(--border);
+  box-sizing: border-box;
 }
 
 html {
   scroll-behavior: smooth;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
   background-color: var(--background);
   color: var(--foreground);
-  font-family: var(--font-sans);
+  font-family: var(--font-sans, system-ui, -apple-system, "Segoe UI", sans-serif);
+  line-height: 1.5;
 }
 
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 8px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: var(--muted-foreground);
-  opacity: 0.7;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
+/* ── Scrollbar ──────────────────────────────────────────────────────────── */
+::-webkit-scrollbar          { width: 6px; height: 6px; }
+::-webkit-scrollbar-thumb    { background: var(--border); border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted-foreground); }
+::-webkit-scrollbar-track    { background: transparent; }
+
+/* ── Sidebar width tokens ─────────────────────────────────────────────────
+   --sw-open    : fully expanded width
+   --sw-closed  : icon-only collapsed width
+   ────────────────────────────────────────────────────────────────────────── */
+:root {
+  --sw-open:   16rem;   /* 256px */
+  --sw-closed: 4.5rem;  /* 72px  */
 }
 
+/* ── Keyframes ──────────────────────────────────────────────────────────── */
 @keyframes fade-up {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
-
 @keyframes fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
-
 @keyframes scale-in {
-  from {
-    opacity: 0;
-    transform: scale(0.96);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
 }
-
 @keyframes shimmer {
-  from {
-    background-position: -200% 0;
-  }
-  to {
-    background-position: 200% 0;
-  }
+  from { background-position: -200% 0; }
+  to   { background-position: 200% 0; }
+}
+@keyframes slide-in-left {
+  from { transform: translateX(-100%); opacity: 0; }
+  to   { transform: translateX(0);     opacity: 1; }
 }

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Reply, Bot, EyeOff, Eye, Trash2, MessageSquareOff, Loader2 } from 'lucide-react';
+import { Reply, Bot, EyeOff, Eye, Trash2, MessageSquareOff, Loader2, Sparkles } from 'lucide-react';
 
 import { api } from '@/lib/api';
 import type { Paginated, CommentDetail, RiskLevel, CommentStatus } from '@/lib/types';
@@ -28,6 +28,7 @@ export default function CommentsPage() {
   const [replyText, setReplyText] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [suggesting, setSuggesting] = useState<string | null>(null);
 
   const buildQuery = useCallback(
     () => `/comments?page=${page}&limit=10${risk ? `&riskLevel=${risk}` : ''}${status ? `&status=${status}` : ''}${onlyModeration ? '&needsModeration=true' : ''}`,
@@ -45,12 +46,23 @@ export default function CommentsPage() {
   const act = useCallback(
     async (id: string, actName: string, body?: unknown) => {
       setBusy(`${id}:${actName}`);
+      const toastMap: Record<string, string> = {
+        'moderate:hide': 'Comentario ocultado',
+        'moderate:unhide': 'Comentario visible de nuevo',
+        'moderate:delete': 'Comentario eliminado de Facebook',
+        'reply': 'Respuesta enviada',
+        'auto-reply': 'Respuesta automática enviada por IA',
+      };
+      const key = actName === 'moderate' ? `moderate:${(body as Record<string,string>)?.action}` : actName;
       try {
         await api.post(`/comments/${id}/${actName}`, body);
-        toast.success(`Acción "${actName}" ejecutada`);
+        toast.success(toastMap[key] ?? 'Acción ejecutada');
         await load();
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : 'Acción fallida');
+        const msg = e instanceof Error ? e.message : 'Acción fallida';
+        // Facebook 403 = permiso no aprobado en la app de Meta
+        const isFbPermission = msg.includes('403') || msg.includes('400') || msg.includes('422') || msg.toLowerCase().includes('permisos insuficientes') || msg.toLowerCase().includes('permission') || msg.toLowerCase().includes('forbidden');
+        toast.error(isFbPermission ? msg : msg);
       } finally {
         setBusy(null);
       }
@@ -62,6 +74,19 @@ export default function CommentsPage() {
     await act(id, 'reply', { message: replyText });
     setReplyId(null);
     setReplyText('');
+  }
+
+  async function suggestReply(id: string) {
+    setSuggesting(id);
+    try {
+      const res = await api.post<{ success: boolean; reply: string }>('/ai/comment-reply', { commentId: id, tone: 'amigable' });
+      setReplyText(res.reply);
+      setReplyId(id);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Error al sugerir respuesta');
+    } finally {
+      setSuggesting(null);
+    }
   }
 
   return (
@@ -99,6 +124,16 @@ export default function CommentsPage() {
                   </div>
                   <span className="text-sm font-medium">{c.fromName ?? 'Anónimo'}</span>
                   <span className="text-xs text-foreground/50">{formatRelative(c.createdAt)}</span>
+                  <span 
+                    className="ml-2 cursor-pointer rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+                    title="Clic para copiar ID"
+                    onClick={() => {
+                      navigator.clipboard.writeText(c.id);
+                      toast.success('ID copiado al portapapeles');
+                    }}
+                  >
+                    {c.id}
+                  </span>
                   <div className="ml-auto flex items-center gap-1.5">
                     <StatusBadge value={c.status} />
                     <StatusBadge value={c.riskLevel} className="!bg-amber-500/10 !text-amber-600 dark:!text-amber-400" />
@@ -111,6 +146,9 @@ export default function CommentsPage() {
                 <div className="flex flex-wrap gap-1.5">
                   <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => { setReplyId(replyId === c.id ? null : c.id); setReplyText(''); }}>
                     <Reply className="size-3.5" /> Responder
+                  </Button>
+                  <Button size="sm" variant="outline" disabled={busy !== null || suggesting === c.id} onClick={() => void suggestReply(c.id)}>
+                    {suggesting === c.id ? <Loader2 className="animate-spin size-3.5" /> : <Sparkles className="size-3.5 text-[#1877F2]" />} Sugerir (IA)
                   </Button>
                   <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void act(c.id, 'auto-reply', { tone: 'friendly' })}>
                     <Bot className="size-3.5" /> Auto (IA)
@@ -134,11 +172,23 @@ export default function CommentsPage() {
                   ) : null}
                 </div>
                 {c.replies.length > 0 ? (
-                  <div className="space-y-1 rounded-lg bg-muted/40 p-3">
+                  <div className="space-y-2 rounded-lg bg-muted/40 p-3">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-foreground/40">Respuestas</p>
                     {c.replies.map((r) => (
-                      <p key={r.id} className="text-xs">
-                        <span className="font-medium">{r.fromName ?? 'Respuesta'}:</span> {r.message || '(sin texto)'}
-                      </p>
+                      <div key={r.id} className="flex items-start gap-2">
+                        <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-[#1877F2]/10 text-[10px] font-bold text-[#1877F2]">
+                          {(r.fromName ?? 'P').slice(0, 1).toUpperCase()}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <span className="text-xs font-semibold">{r.fromName ?? 'Página'}</span>
+                          {r.isFromPage && (
+                            <span className="ml-1.5 rounded bg-[#1877F2]/10 px-1.5 py-0.5 text-[10px] font-medium text-[#1877F2]">
+                              Página
+                            </span>
+                          )}
+                          <p className="text-xs text-foreground/70">{r.message || '(sin texto)'}</p>
+                        </div>
+                      </div>
                     ))}
                   </div>
                 ) : null}

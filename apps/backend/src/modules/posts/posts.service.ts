@@ -190,6 +190,7 @@ export class PostsService {
     }
 
     await this.prisma.post.delete({ where: { id } });
+
     await this.audit.record({
       action: 'post.delete',
       category: LogCategory.POST,

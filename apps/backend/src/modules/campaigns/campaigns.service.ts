@@ -179,15 +179,16 @@ export class CampaignsService implements OnModuleInit {
 
   async remove(userId: string, id: string): Promise<{ success: boolean }> {
     const campaign = await this.requireCampaign(userId, id);
-    if (campaign.status !== CampaignStatus.DRAFT) {
-      throw new ConflictException('Solo se puede eliminar una campaña en DRAFT');
+    const allowedStatuses: CampaignStatus[] = [CampaignStatus.DRAFT, CampaignStatus.COMPLETED, CampaignStatus.FAILED, CampaignStatus.CANCELLED];
+    if (!allowedStatuses.includes(campaign.status)) {
+      throw new ConflictException('Solo se pueden eliminar campañas en borrador o ya finalizadas');
     }
     await this.prisma.campaign.delete({ where: { id } });
     await this.audit.record({
       action: 'campaign.delete',
       category: LogCategory.CAMPAIGN,
       userId,
-      campaignId: id,
+      metadata: { campaignId: id, name: campaign.name },
     });
     return { success: true };
   }

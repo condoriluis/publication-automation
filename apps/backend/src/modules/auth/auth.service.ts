@@ -27,6 +27,10 @@ export interface AuthResult {
   tokens: AuthTokens;
 }
 
+const RECAPTCHA_VERIFY_URL = 'https://www.google.com/recaptcha/api/siteverify';
+/** Puntuación mínima de reCAPTCHA v3. Por debajo se considera bot (0 = bot, 1 = humano). */
+const RECAPTCHA_MIN_SCORE = 0.5;
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -59,6 +63,39 @@ export class AuthService {
     return this.config.get<number>('bcryptRounds', { infer: true });
   }
 
+  private get recaptchaSecret(): string | undefined {
+    return this.config.get<string>('RECAPTCHA_SECRET_KEY');
+  }
+
+  /**
+   * Valida el token de reCAPTCHA v3 contra la API de Google.
+   * Solo se aplica en producción o si el secret está configurado.
+   * Lanza BadRequestException si el token es inválido o el score es bajo.
+   */
+  private async verifyRecaptcha(token: string | undefined): Promise<void> {
+    const secret = this.recaptchaSecret;
+    if (!secret || this.config.get('NODE_ENV') !== 'production') return;
+
+    if (!token) {
+      throw new BadRequestException('Se requiere validación de reCAPTCHA');
+    }
+
+    const params = new URLSearchParams({ secret, response: token });
+    const res = await fetch(`${RECAPTCHA_VERIFY_URL}?${params.toString()}`, { method: 'POST' });
+
+    if (!res.ok) {
+      this.logger.warn('reCAPTCHA verify request failed', 'Auth');
+      throw new BadRequestException('Error al verificar reCAPTCHA');
+    }
+
+    const data = (await res.json()) as { success: boolean; score: number; 'error-codes'?: string[] };
+
+    if (!data.success || data.score < RECAPTCHA_MIN_SCORE) {
+      this.logger.warn(`reCAPTCHA failed: success=${data.success} score=${data.score}`, 'Auth');
+      throw new BadRequestException('Verificación de seguridad fallida. Inténtalo de nuevo.');
+    }
+  }
+
   async register(dto: RegisterDto, ctx: AuthContext): Promise<AuthResult> {
     const user = await this.users.create(dto, [Role.OPERATOR]);
     const session = await this.createSession(user);
@@ -70,6 +107,9 @@ export class AuthService {
     if (!dto.email && !dto.username) {
       throw new BadRequestException('Indica email o username');
     }
+
+    await this.verifyRecaptcha(dto.recaptchaToken);
+
     const user = await this.users.findByLogin(dto.email, dto.username);
     if (!user) {
       await this.audit('auth.login.failed', null, ctx, { email: dto.email, username: dto.username });
