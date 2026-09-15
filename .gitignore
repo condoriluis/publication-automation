@@ -22,6 +22,8 @@ coverage/
 
 # database
 *.sql
+!prisma/migrations/
+!**/prisma/migrations/**/*.sql
 prisma/*.db
 prisma/*.db-journal
 
