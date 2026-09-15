@@ -10,6 +10,7 @@ import { ArrowLeft, Play, X, Trash2, ExternalLink, RefreshCw, Loader2,
 import { api } from '@/lib/api';
 import type { PostDetail } from '@/lib/types';
 import { PageHeader } from '@/components/page-header';
+import { FacebookPostPreview } from '@/components/facebook-post-preview';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/status-badge';
@@ -100,19 +101,15 @@ export default function PostDetailPage() {
       <div className="grid gap-4 lg:grid-cols-5">
         {/* Left: post preview + meta */}
         <div className="space-y-4 lg:col-span-3">
-          {/* Post preview card styled as Facebook */}
-          <Card className="overflow-hidden">
-            <div className="flex items-center gap-3 border-b bg-muted/30 px-4 py-3">
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#1877F2] text-sm font-bold text-white">
-                {(post.page?.name ?? 'P').slice(0, 2).toUpperCase()}
-              </div>
-              <div>
-                <p className="text-sm font-semibold">{post.page?.name ?? 'Página'}</p>
-                <p className="flex items-center gap-1 text-xs text-foreground/50">
-                  {post.publishedAt ? formatDate(post.publishedAt) : '—'} · Facebook
-                </p>
-              </div>
-              <div className="ml-auto flex items-center gap-2">
+          {/* Post preview styled as Facebook */}
+          <FacebookPostPreview
+            pageName={post.page?.name ?? 'Página'}
+            content={post.content}
+            imageUrls={post.imageUrls}
+            videoUrl={post.videoUrl}
+            timeLabel={post.publishedAt ? formatDate(post.publishedAt) : '—'}
+            headerExtra={
+              <div className="flex shrink-0 items-center gap-2">
                 <StatusBadge value={post.status} />
                 {post.aiGenerated ? (
                   <span className="flex items-center gap-1 rounded-full bg-[#1877F2]/10 px-2.5 py-1 text-[11px] font-medium text-[#1877F2]">
@@ -120,26 +117,8 @@ export default function PostDetailPage() {
                   </span>
                 ) : null}
               </div>
-            </div>
-            <CardContent className="pt-4 flex flex-col items-center">
-              <div className="w-full mb-3 text-left">
-                <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground/90">{post.content}</p>
-              </div>
-              
-              {post.videoUrl ? (
-                <div className="w-full flex justify-center mt-2">
-                  <video src={post.videoUrl} controls className="max-h-[400px] w-full rounded-lg object-cover" />
-                </div>
-              ) : post.imageUrls && post.imageUrls.length > 0 ? (
-                <div className={`mt-2 w-full grid gap-2 ${post.imageUrls.length === 1 ? 'grid-cols-1 place-items-center' : 'grid-cols-2'}`}>
-                  {post.imageUrls.map((u) => (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img key={u} src={u} alt="" className={`w-full rounded-lg object-cover ${post.imageUrls.length === 1 ? 'max-h-[400px] object-contain' : ''}`} />
-                  ))}
-                </div>
-              ) : null}
-            </CardContent>
-          </Card>
+            }
+          />
 
           {/* Action buttons */}
           <div className="flex flex-wrap gap-2">

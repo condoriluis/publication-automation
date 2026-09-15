@@ -12,6 +12,15 @@ import { EmptyState } from '@/components/empty-state';
 import { StatusBadge } from '@/components/status-badge';
 import { formatRelative } from '@/lib/utils';
 
+interface StatCardDef {
+  label: string;
+  value: number;
+  icon: React.ComponentType<{ className?: string }>;
+  href: string;
+  color: string; // color del ícono / texto
+  bg: string;    // fondo del chip
+}
+
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -27,30 +36,20 @@ export default function DashboardPage() {
   if (!data) return <DashboardSkeleton />;
 
   const t = data.totals;
-  const cards = [
-    { label: 'Posts publicados', value: t.postsPublicados, icon: FileText, href: '/posts?status=PUBLISHED' },
-    { label: 'Programados', value: t.programados, icon: CalendarClock, href: '/posts?status=SCHEDULED' },
-    { label: 'Fallidos', value: t.fallidos, icon: XCircle, href: '/posts?status=FAILED' },
-    { label: 'Campañas activas', value: t.campañasActivas, icon: Megaphone, href: '/campaigns' },
-    { label: 'Páginas conectadas', value: t.paginasConectadas, icon: Link2, href: '/pages' },
-    { label: 'Comentarios recientes', value: t.comentariosRecientes, icon: MessageCircle, href: '/comments' },
+  const cards: StatCardDef[] = [
+    { label: 'Posts publicados', value: t.postsPublicados, icon: FileText, href: '/posts?status=PUBLISHED', color: 'text-[#1877F2]', bg: 'bg-[#1877F2]/10' },
+    { label: 'Programados', value: t.programados, icon: CalendarClock, href: '/posts?status=SCHEDULED', color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-500/10' },
+    { label: 'Fallidos', value: t.fallidos, icon: XCircle, href: '/posts?status=FAILED', color: 'text-red-600 dark:text-red-400', bg: 'bg-red-500/10' },
+    { label: 'Campañas activas', value: t.campañasActivas, icon: Megaphone, href: '/campaigns', color: 'text-violet-600 dark:text-violet-400', bg: 'bg-violet-500/10' },
+    { label: 'Páginas conectadas', value: t.paginasConectadas, icon: Link2, href: '/pages', color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-500/10' },
+    { label: 'Comentarios recientes', value: t.comentariosRecientes, icon: MessageCircle, href: '/comments', color: 'text-sky-600 dark:text-sky-400', bg: 'bg-sky-500/10' },
   ];
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         {cards.map((c) => (
-          <Link key={c.label} href={c.href} className="group">
-            <Card className="transition-colors group-hover:border-primary/40">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm text-foreground/60">{c.label}</p>
-                  <c.icon className="size-4 text-foreground/40" />
-                </div>
-                <p className="mt-2 text-2xl font-semibold">{c.value}</p>
-              </CardContent>
-            </Card>
-          </Link>
+          <StatCard key={c.label} {...c} />
         ))}
       </div>
 
@@ -100,6 +99,24 @@ export default function DashboardPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+function StatCard({ label, value, icon: Icon, href, color, bg }: StatCardDef) {
+  return (
+    <Link href={href} className="group">
+      <div className="rounded-xl border bg-card p-4 shadow-sm transition-all group-hover:-translate-y-0.5 group-hover:border-[#1877F2]/40 group-hover:shadow-md">
+        <div className="flex items-center gap-3">
+          <span className={`flex size-10 shrink-0 items-center justify-center rounded-full ${bg}`}>
+            <Icon className={`size-5 ${color}`} />
+          </span>
+          <div className="min-w-0">
+            <p className="text-2xl font-bold leading-none tabular-nums">{value}</p>
+            <p className="mt-1 truncate text-xs font-medium text-muted-foreground">{label}</p>
+          </div>
+        </div>
+      </div>
+    </Link>
   );
 }
 

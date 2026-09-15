@@ -1,4 +1,4 @@
-import { Link2, Users, Megaphone, FileText, MessageCircle, CalendarClock, History, Activity, Bot, Settings, LayoutDashboard } from 'lucide-react';
+import { Link2, Users, Megaphone, FileText, MessageCircle, CalendarClock, History, Activity, Bot, LayoutDashboard } from 'lucide-react';
 
 export interface NavItem {
   title: string;
@@ -20,13 +20,12 @@ export const mainNav: NavItem[] = [
 ];
 
 export const bottomNav: NavItem[] = [
-  { title: 'Control de Acceso', href: '/settings/users', icon: Users },
-  { title: 'Configuración', href: '/settings', icon: Settings },
+  { title: 'Control de Acceso', href: '/users', icon: Users },
 ];
 
 export function groupLabel(nav: NavItem[]): { primary: NavItem[]; users: NavItem[] } {
   return {
-    primary: nav.filter((n) => n.href !== '/settings/users' && n.href !== '/settings'),
-    users: nav.filter((n) => n.href === '/settings/users' || n.href === '/settings'),
+    primary: nav.filter((n) => n.href !== '/users'),
+    users: nav.filter((n) => n.href === '/users'),
   };
 }

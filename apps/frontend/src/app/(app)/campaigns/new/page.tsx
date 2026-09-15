@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { DateTimePicker } from '@/components/ui/date-time-picker';
 import { EmptyState } from '@/components/empty-state';
+import { FacebookPostPreview } from '@/components/facebook-post-preview';
 
 interface GroupDraft {
   percentage: string;
@@ -138,7 +139,8 @@ function NewCampaignContent() {
       {pages && pages.data.length === 0 ? (
         <EmptyState title="Conecta una página primero" description="Necesitas una página conectada para crear campañas." />
       ) : (
-        <form onSubmit={submit} className="mx-auto max-w-3xl space-y-4">
+        <div className="grid gap-4 lg:grid-cols-[1fr_420px]">
+          <form onSubmit={submit} className="space-y-4">
           <Card>
             <CardHeader><CardTitle className="text-base">Configuración</CardTitle></CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
@@ -245,7 +247,20 @@ function NewCampaignContent() {
               </Button>
             </CardFooter>
           </Card>
-        </form>
+          </form>
+
+          <div className="lg:sticky lg:top-20 lg:self-start space-y-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-foreground/50">Vista previa</p>
+            <FacebookPostPreview
+              pageName={pages?.data.find((p) => p.id === form.pageId)?.name ?? 'Página'}
+              pagePicture={pages?.data.find((p) => p.id === form.pageId)?.pictureUrl ?? null}
+              content={form.contentTemplate}
+              imageUrls={form.imageUrls.split(',').map((s) => s.trim()).filter(Boolean)}
+              videoUrl={form.videoUrl.trim() || null}
+              timeLabel={form.startAt ? `Desde el ${new Date(form.startAt).toLocaleString('es')}` : 'En espera de inicio'}
+            />
+          </div>
+        </div>
       )}
     </div>
   );

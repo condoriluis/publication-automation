@@ -141,11 +141,7 @@ function Sidebar({
           <SidebarLink
             key={item.href}
             {...item}
-            active={
-              item.href === '/settings'
-                ? pathname === '/settings'
-                : pathname.startsWith(item.href)
-            }
+            active={pathname.startsWith(item.href)}
             collapsed={collapsed}
             onNavigate={onCloseMobile}
           />
@@ -162,11 +158,7 @@ function Sidebar({
             <SidebarLink
               key={item.href}
               {...item}
-              active={
-                item.href === '/settings'
-                  ? pathname === '/settings'
-                  : pathname.startsWith(item.href)
-              }
+              active={pathname.startsWith(item.href)}
               collapsed={collapsed}
               onNavigate={onCloseMobile}
             />

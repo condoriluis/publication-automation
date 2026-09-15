@@ -263,6 +263,7 @@ export interface PostListRow {
 // ── Comentarios ──────────────────────────────────────────────────────────────
 export type CommentStatus = 'VISIBLE' | 'HIDDEN' | 'DELETED' | 'RESPONDED';
 export type RiskLevel = 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH';
+export type CommentClassification = 'INSULTO' | 'PREGUNTA' | 'SPAM' | 'NORMAL' | 'OPORTUNIDAD';
 
 export interface CommentDetail {
   id: string;
@@ -276,6 +277,9 @@ export interface CommentDetail {
   isHidden: boolean;
   isFromPage: boolean;
   riskLevel: RiskLevel;
+  classification: CommentClassification | null;
+  confidence: number | null;
+  needsReview: boolean;
   status: CommentStatus;
   analyzedAt: string | null;
   createdAt: string;
@@ -297,6 +301,44 @@ export interface AutoReplyPayload {
 export interface ModerateCommentPayload {
   action: 'hide' | 'unhide' | 'delete';
   reason?: string;
+}
+
+// ── Reglas de automatización de comentarios ───────────────────────────────────
+export type CommentRuleAction = 'REPLY' | 'HIDE' | 'DELETE' | 'FLAG_REVIEW';
+
+export interface CommentRule {
+  id: string;
+  pageId: string;
+  name: string;
+  enabled: boolean;
+  keywords: string[] | null;
+  classifications: CommentClassification[] | null;
+  maxConfidence: number | null;
+  action: CommentRuleAction;
+  replyTemplate: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateCommentRulePayload {
+  pageId: string;
+  name: string;
+  enabled?: boolean;
+  keywords?: string[];
+  classifications?: CommentClassification[];
+  maxConfidence?: number;
+  action: CommentRuleAction;
+  replyTemplate?: string;
+}
+
+export interface UpdateCommentRulePayload {
+  name?: string;
+  enabled?: boolean;
+  keywords?: string[];
+  classifications?: CommentClassification[];
+  maxConfidence?: number;
+  action?: CommentRuleAction;
+  replyTemplate?: string;
 }
 
 // ── Dashboard ────────────────────────────────────────────────────────────────
@@ -401,6 +443,8 @@ export interface CommentAnalysisResult {
   commentId: string;
   message: string;
   riskLevel: RiskLevel;
+  classification: CommentClassification;
+  confidence: number | null;
   sentiment?: string;
   suggestedAction?: string;
   explanation?: string;

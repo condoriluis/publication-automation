@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { DateTimePicker } from '@/components/ui/date-time-picker';
 import { EmptyState } from '@/components/empty-state';
+import { FacebookPostPreview } from '@/components/facebook-post-preview';
 
 export default function NewPostPage() {
   const router = useRouter();
@@ -97,7 +98,8 @@ export default function NewPostPage() {
       {pages && pages.data.length === 0 ? (
         <EmptyState title="Conecta una página primero" description="Necesitas una página conectada para crear posts." />
       ) : (
-        <form onSubmit={submit} className="mx-auto max-w-3xl space-y-4">
+        <div className="grid gap-4 lg:grid-cols-[1fr_420px]">
+          <form onSubmit={submit} className="space-y-4">
           <Card>
             <CardHeader><CardTitle className="text-base">Datos</CardTitle></CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
@@ -165,7 +167,20 @@ export default function NewPostPage() {
               </Button>
             </CardFooter>
           </Card>
-        </form>
+          </form>
+
+          <div className="lg:sticky lg:top-20 lg:self-start space-y-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-foreground/50">Vista previa</p>
+            <FacebookPostPreview
+              pageName={pages?.data.find((p) => p.id === form.pageId)?.name ?? 'Página'}
+              pagePicture={pages?.data.find((p) => p.id === form.pageId)?.pictureUrl ?? null}
+              content={form.content}
+              imageUrls={form.imageUrls.split(',').map((s) => s.trim()).filter(Boolean)}
+              videoUrl={form.videoUrl.trim() || null}
+              timeLabel={form.scheduledFor ? `Programada para ${new Date(form.scheduledFor).toLocaleString('es')}` : 'Borrador'}
+            />
+          </div>
+        </div>
       )}
     </div>
   );

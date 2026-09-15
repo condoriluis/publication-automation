@@ -73,30 +73,42 @@ export interface RequestOptions {
   auth?: boolean;
 }
 
+/** Refresco en curso (single-flight): evita rotaciones concurrentes del refresh token. */
+let refreshPromise: Promise<boolean> | null = null;
+
 export async function refreshAccessToken(): Promise<boolean> {
+  if (refreshPromise) return refreshPromise;
+
   const refresh = getRefreshToken();
   const access = getAccessToken();
   if (!refresh || !access) return false;
-  try {
-    const res = await fetch(`${API_URL}/auth/refresh`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${access}` },
-      body: JSON.stringify({ refreshToken: refresh }),
-    });
-    if (!res.ok) {
+
+  refreshPromise = (async () => {
+    try {
+      const res = await fetch(`${API_URL}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${access}` },
+        body: JSON.stringify({ refreshToken: refresh }),
+      });
+      if (!res.ok) {
+        clearTokens();
+        return false;
+      }
+      const json = (await res.json()) as { user?: unknown; tokens: AuthTokens };
+      if (json.tokens?.accessToken) {
+        saveTokens(json.tokens.accessToken, json.tokens.refreshToken);
+        return true;
+      }
       clearTokens();
       return false;
+    } catch {
+      return false;
+    } finally {
+      refreshPromise = null;
     }
-    const json = (await res.json()) as { user?: unknown; tokens: AuthTokens };
-    if (json.tokens?.accessToken) {
-      saveTokens(json.tokens.accessToken, json.tokens.refreshToken);
-      return true;
-    }
-    clearTokens();
-    return false;
-  } catch {
-    return false;
-  }
+  })();
+
+  return refreshPromise;
 }
 
 export const api = {

@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Sparkles, Loader2, Bot, ArrowRight, ChevronDown, ChevronUp, Cpu } from 'lucide-react';
+import { Sparkles, Loader2, Bot, ArrowRight, ChevronDown, ChevronUp, Cpu, RefreshCw, CheckCircle2 } from 'lucide-react';
 
 import { api } from '@/lib/api';
-import type { CommentAnalysisResult, Paginated, PageListRow } from '@/lib/types';
+import type { CommentAnalysisResult, CommentClassification, Paginated, PageListRow, CommentDetail } from '@/lib/types';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -15,7 +15,17 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StatusBadge } from '@/components/status-badge';
+import { EmptyState } from '@/components/empty-state';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { formatRelative } from '@/lib/utils';
+
+const CLASSIFICATION_LABELS: Record<CommentClassification, { label: string; className: string }> = {
+  INSULTO: { label: 'Insulto', className: '!bg-red-500/10 !text-red-600 dark:!text-red-400' },
+  PREGUNTA: { label: 'Pregunta', className: '!bg-sky-500/10 !text-sky-600 dark:!text-sky-400' },
+  SPAM: { label: 'Spam', className: '!bg-orange-500/10 !text-orange-600 dark:!text-orange-400' },
+  NORMAL: { label: 'Normal', className: '!bg-emerald-500/10 !text-emerald-600 dark:!text-emerald-400' },
+  OPORTUNIDAD: { label: 'Oportunidad', className: '!bg-violet-500/10 !text-violet-600 dark:!text-violet-400' },
+};
 
 export default function AiPage() {
   const router = useRouter();
@@ -26,23 +36,34 @@ export default function AiPage() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [aiStatus, setAiStatus] = useState<{ provider: string; model: string; configured: boolean } | null>(null);
 
+  const [pending, setPending] = useState<Paginated<CommentDetail> | null>(null);
+  const [pendingPage, setPendingPage] = useState('all');
+  const [analyzing, setAnalyzing] = useState(false);
+  const [results, setResults] = useState<CommentAnalysisResult[]>([]);
+
   useEffect(() => {
     api.get<{ provider: string; model: string; configured: boolean }>('/ai/status')
       .then(setAiStatus)
-      .catch(() => {});
+      .catch(() => { });
   }, []);
-
-  const [commentIds, setCommentIds] = useState('');
-  const [analyzing, setAnalyzing] = useState(false);
-  const [results, setResults] = useState<CommentAnalysisResult[]>([]);
 
   useEffect(() => {
     api.get<Paginated<PageListRow>>('/pages?page=1&limit=100').then((p) => {
       setPages(p);
       const first = p.data[0];
       if (first) setGenForm((f) => ({ ...f, pageId: f.pageId || first.id }));
-    }).catch(() => {});
+    }).catch(() => { });
   }, []);
+
+  const loadPending = useCallback(async () => {
+    const q = pendingPage === 'all' ? '' : `&pageId=${pendingPage}`;
+    try {
+      const data = await api.get<Paginated<CommentDetail>>(`/comments?needsAnalysis=true&limit=100${q}`);
+      setPending(data);
+    } catch { /* ignore */ }
+  }, [pendingPage]);
+
+  useEffect(() => { void loadPending(); }, [loadPending]);
 
   async function generate(e: React.FormEvent) {
     e.preventDefault();
@@ -57,14 +78,19 @@ export default function AiPage() {
     }
   }
 
-  async function analyze(e: React.FormEvent) {
+  async function analyzeAll(e: React.FormEvent) {
     e.preventDefault();
-    const ids = commentIds.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean);
-    if (!ids.length) return toast.error('Ingresa al menos un ID de comentario');
     setAnalyzing(true);
     try {
-      const res = await api.post<{ success: boolean; results: CommentAnalysisResult[] }>('/ai/analyze-comments', { commentIds: ids });
-      setResults(res.results);
+      const payload = pendingPage === 'all' ? {} : { pageId: pendingPage };
+      const res = await api.post<{ success: boolean; requested: number; analyzed: CommentAnalysisResult[] }>('/ai/analyze-pending-comments', payload);
+      setResults(res.analyzed);
+      if (res.analyzed.length > 0) {
+        toast.success(`Analizados ${res.analyzed.length} comentario${res.analyzed.length === 1 ? '' : 's'}`);
+      } else {
+        toast.info('No hay comentarios pendientes de análisis');
+      }
+      void loadPending();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error al analizar');
     } finally {
@@ -72,15 +98,16 @@ export default function AiPage() {
     }
   }
 
+  const pendingCount = pending?.data.length ?? 0;
+
   return (
     <div className="space-y-4">
       <PageHeader title="Inteligencia" subtitle="Genera contenido y analiza comentarios con IA">
         {aiStatus && (
-          <span className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium ${
-            aiStatus.configured
+          <span className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium ${aiStatus.configured
               ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
               : 'border-destructive/30 bg-destructive/10 text-destructive'
-          }`}>
+            }`}>
             <Cpu className="size-3" />
             {aiStatus.configured ? (
               <><span className="capitalize">{aiStatus.provider}</span> · <span className="font-mono text-[11px]">{aiStatus.model}</span></>
@@ -92,7 +119,14 @@ export default function AiPage() {
       <Tabs defaultValue="generate">
         <TabsList>
           <TabsTrigger value="generate"><Sparkles className="mr-1 size-3.5" /> Generar publicación</TabsTrigger>
-          <TabsTrigger value="analyze"><Bot className="mr-1 size-3.5" /> Analizar comentarios</TabsTrigger>
+          <TabsTrigger value="analyze">
+            <Bot className="mr-1 size-3.5" /> Analizar comentarios
+            {pendingCount > 0 && (
+              <span className="ml-1.5 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                {pendingCount}
+              </span>
+            )}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="generate">
@@ -108,9 +142,7 @@ export default function AiPage() {
                     </SelectTrigger>
                     <SelectContent>
                       {pages?.data.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.name}
-                        </SelectItem>
+                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -192,33 +224,69 @@ export default function AiPage() {
 
         <TabsContent value="analyze">
           <Card>
-            <form onSubmit={analyze}>
-              <CardHeader><CardTitle className="text-base">Análisis de riesgo de comentarios</CardTitle></CardHeader>
-              <CardContent className="space-y-2">
-                <Label>IDs de comentarios (separados por coma o espacio)</Label>
-                <Textarea rows={3} value={commentIds} onChange={(e) => setCommentIds(e.target.value)} required placeholder="clshd1x2, clyxz..." />
+            <form onSubmit={analyzeAll}>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <span>Analizar comentarios pendientes</span>
+                  {pendingCount > 0 && (
+                    <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-bold text-amber-600 dark:text-amber-400">
+                      {pendingCount} pendiente{pendingCount !== 1 ? 's' : ''}
+                    </span>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-xs text-foreground/50">
+                  La IA clasificará automáticamente los comentarios por riesgo, sentimiento, y si requieren acción.
+                </p>
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Filtrar por página</Label>
+                    <Select value={pendingPage} onValueChange={(val) => { setPendingPage(val); setResults([]); }}>
+                      <SelectTrigger className="w-[220px]"><SelectValue placeholder="Todas las páginas" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todas las páginas</SelectItem>
+                        {pages?.data.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex gap-2 pt-5">
+                    <Button type="submit" disabled={analyzing || pendingCount === 0}>
+                      {analyzing ? <Loader2 className="animate-spin" /> : <Bot className="size-4" />}
+                      {analyzing ? 'Analizando…' : `Analizar ${pendingCount || ''} pendiente${pendingCount !== 1 ? 's' : ''}`}
+                    </Button>
+                    <Button type="button" variant="outline" onClick={() => void loadPending()} disabled={analyzing}>
+                      <RefreshCw className="size-4" />
+                    </Button>
+                  </div>
+                </div>
               </CardContent>
-              <CardFooter>
-                <Button type="submit" disabled={analyzing}>
-                  {analyzing ? <Loader2 className="animate-spin" /> : <Bot className="size-4" />}
-                  {analyzing ? 'Analizando…' : 'Analizar'}
-                </Button>
-              </CardFooter>
             </form>
           </Card>
 
-          {results.length > 0 ? (
+          {results.length > 0 && (
             <div className="space-y-3">
+              <p className="text-xs font-medium text-foreground/60">
+                <CheckCircle2 className="inline-block size-3.5 mr-1 text-emerald-500" />
+                {results.length} comentario{results.length !== 1 ? 's' : ''} analizado{results.length !== 1 ? 's' : ''}
+              </p>
               {results.map((r) => (
                 <Card key={r.commentId} className="overflow-hidden">
-                  <div className={`h-1 w-full ${
-                    r.riskLevel === 'HIGH' ? 'bg-red-500' :
-                    r.riskLevel === 'MEDIUM' ? 'bg-orange-400' :
-                    r.riskLevel === 'LOW' ? 'bg-emerald-500' : 'bg-muted'
-                  }`} />
+                  <div className={`h-1 w-full ${r.riskLevel === 'HIGH' ? 'bg-red-500' :
+                      r.riskLevel === 'MEDIUM' ? 'bg-orange-400' :
+                        r.riskLevel === 'LOW' ? 'bg-emerald-500' : 'bg-muted'
+                    }`} />
                   <CardContent className="pt-4 space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <StatusBadge value={r.riskLevel} />
+                      {r.classification ? (
+                        <span title={`Confianza: ${r.confidence ?? 'n/d'}%`} className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${CLASSIFICATION_LABELS[r.classification].className}`}>
+                          {CLASSIFICATION_LABELS[r.classification].label}
+                          {typeof r.confidence === 'number' && <span className="ml-1 font-mono text-[9px] text-foreground/40">{r.confidence}%</span>}
+                        </span>
+                      ) : null}
                       {r.sentiment && (
                         <span className="rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground capitalize">
                           {r.sentiment}
@@ -238,7 +306,11 @@ export default function AiPage() {
                 </Card>
               ))}
             </div>
-          ) : null}
+          )}
+
+          {!analyzing && pendingCount === 0 && results.length === 0 && (
+            <EmptyState title="Todo analizado" description="No hay comentarios nuevos pendientes de clasificación. Los comentarios entrantes se analizan automáticamente." />
+          )}
         </TabsContent>
       </Tabs>
     </div>

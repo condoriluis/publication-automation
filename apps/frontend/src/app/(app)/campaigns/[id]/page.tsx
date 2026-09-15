@@ -6,11 +6,11 @@ import { toast } from 'sonner';
 import {
   Play, Pause, RotateCcw, X, Copy, ArrowLeft, CheckCircle2,
   XCircle, Clock, Zap, Shield, Bot, Timer, ChevronRight,
-  Trash2,
+  Trash2, ExternalLink, Film,
 } from 'lucide-react';
 
 import { api } from '@/lib/api';
-import type { CampaignProgress } from '@/lib/types';
+import type { CampaignProgress, Paginated, PostListRow } from '@/lib/types';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -40,45 +40,66 @@ function useCountdown(intervalSeconds: number, isRunning: boolean) {
 }
 
 // ─── Facebook post preview ────────────────────────────────────────────────────
-function PostPreview({ text, pageName, status }: { text: string; pageName: string; status: string }) {
-  const isPublished = status === 'PUBLISHED';
-  const isFailed = status === 'FAILED';
+function PostPreview({ post }: { post: PostListRow }) {
+  const isPublished = post.status === 'PUBLISHED';
+  const isFailed = post.status === 'FAILED';
+  const isCancelled = post.status === 'CANCELLED';
+  const pageName = post.page?.name ?? post.pageId.slice(0, 8);
+  const images = (post.imageUrls ?? []).slice(0, 3);
+  const extraImages = (post.imageUrls?.length ?? 0) - images.length;
+  const statusLabel = isPublished ? 'Publicado' : isFailed ? 'Fallido' : isCancelled ? 'Cancelado' : 'Pendiente';
+
   return (
-    <div className={`rounded-xl border bg-card p-4 transition-all ${isPublished ? 'border-emerald-500/40 bg-emerald-500/5' : isFailed ? 'border-destructive/30 bg-destructive/5' : 'border-border'}`}>
+    <div className={`rounded-xl border bg-card p-3.5 transition-all ${isPublished ? 'border-emerald-500/40 bg-emerald-500/5' : isFailed ? 'border-destructive/30 bg-destructive/5' : 'border-border'}`}>
       <div className="flex items-start gap-3">
         {/* Avatar */}
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#1877F2] text-xs font-bold text-white">
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#1877F2] text-[10px] font-bold text-white">
           {pageName.slice(0, 2).toUpperCase()}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold">{pageName}</span>
-            <span className="text-[10px] text-foreground/40">· Facebook</span>
+          <div className="flex items-center gap-1.5">
+            <span className="truncate text-sm font-semibold">{pageName}</span>
+            <span className="shrink-0 text-[10px] text-foreground/40">· Facebook</span>
           </div>
-          <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-foreground/80 line-clamp-4">{text}</p>
-        </div>
-        <div className="shrink-0">
-          {isPublished ? (
-            <CheckCircle2 className="size-5 text-emerald-500" />
-          ) : isFailed ? (
-            <XCircle className="size-5 text-destructive" />
-          ) : (
-            <Clock className="size-4 text-foreground/30" />
-          )}
+          <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground/80 line-clamp-3">{post.content}</p>
+
+          {/* Media: imágenes y video (compacto) */}
+          {(images.length > 0 || post.videoUrl) ? (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              {images.map((u) => (
+                <img key={u} src={u} alt="" className="size-12 rounded-md border border-border object-cover sm:size-14" />
+              ))}
+              {extraImages > 0 && (
+                <span className="flex size-12 items-center justify-center rounded-md border bg-muted text-xs font-medium text-foreground/50 sm:size-14">
+                  +{extraImages}
+                </span>
+              )}
+              {post.videoUrl ? (
+                <span className="inline-flex h-5 items-center gap-1 rounded-full bg-muted px-2 text-[10px] font-medium text-foreground/60">
+                  <Film className="size-3" /> Video
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+
+          <div className="mt-2 flex items-center justify-between gap-2 border-t border-border/60 pt-1.5">
+            <span className={`flex items-center gap-1 text-[11px] font-medium ${isPublished ? 'text-emerald-600 dark:text-emerald-400' : isFailed ? 'text-destructive' : 'text-foreground/40'}`}>
+              {isPublished ? <CheckCircle2 className="size-3" /> : isFailed ? <XCircle className="size-3" /> : <Clock className="size-3" />}
+              {statusLabel}
+            </span>
+            {isPublished && post.metaPermalinkUrl ? (
+              <a
+                href={post.metaPermalinkUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex shrink-0 items-center gap-1 text-[11px] font-medium text-[#1877F2] hover:underline"
+              >
+                <ExternalLink className="size-3" /> Ver en Facebook
+              </a>
+            ) : null}
+          </div>
         </div>
       </div>
-      {isPublished && (
-        <div className="mt-2 flex items-center gap-1 border-t border-emerald-500/20 pt-2">
-          <CheckCircle2 className="size-3 text-emerald-500" />
-          <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">Publicado</span>
-        </div>
-      )}
-      {isFailed && (
-        <div className="mt-2 flex items-center gap-1 border-t border-destructive/20 pt-2">
-          <XCircle className="size-3 text-destructive" />
-          <span className="text-[11px] font-medium text-destructive">Fallido</span>
-        </div>
-      )}
     </div>
   );
 }
@@ -87,15 +108,21 @@ export default function CampaignDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const [data, setData] = useState<CampaignProgress | null>(null);
+  const [posts, setPosts] = useState<PostListRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const load = useCallback(() => {
-    api
-      .get<CampaignProgress>(`/campaigns/${params.id}/progress`)
-      .then(setData)
+    Promise.all([
+      api.get<CampaignProgress>(`/campaigns/${params.id}/progress`),
+      api.get<Paginated<PostListRow>>(`/posts?campaignId=${params.id}&limit=100`),
+    ])
+      .then(([progress, postsRes]) => {
+        setData(progress);
+        setPosts(postsRes.data);
+      })
       .catch((e) => setError(e instanceof Error ? e.message : 'No se pudo cargar la campaña'));
   }, [params.id]);
 
@@ -144,7 +171,7 @@ export default function CampaignDetailPage() {
   const isRunning = c.status === 'RUNNING';
   const isDone = ['COMPLETED', 'CANCELLED', 'FAILED'].includes(c.status);
 
-  // Posts simulados desde groups para el feed de vista previa
+  // Contadores para el encabezado y las tarjetas de estado
   const publishedCount = data.postsDone;
   const failedCount = data.postsFailed;
   const pendingCount = data.postsTotal - publishedCount - failedCount;
@@ -295,41 +322,16 @@ export default function CampaignDetailPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 max-h-[600px] overflow-y-auto pr-2">
-              {/* Published posts */}
-              {Array.from({ length: publishedCount }).map((_, i) => (
-                <PostPreview
-                  key={`pub-${i}`}
-                  text={c.contentTemplate}
-                  pageName={c.pageId.slice(0, 8)}
-                  status="PUBLISHED"
-                />
-              ))}
-              {/* Failed posts */}
-              {Array.from({ length: failedCount }).map((_, i) => (
-                <PostPreview
-                  key={`fail-${i}`}
-                  text={c.contentTemplate}
-                  pageName={c.pageId.slice(0, 8)}
-                  status="FAILED"
-                />
-              ))}
-              {/* Pending posts */}
-              {Array.from({ length: Math.min(pendingCount, 3) }).map((_, i) => (
-                <PostPreview
-                  key={`pend-${i}`}
-                  text={c.contentTemplate}
-                  pageName={c.pageId.slice(0, 8)}
-                  status="PENDING"
-                />
-              ))}
-              {pendingCount > 3 && (
-                <p className="py-2 text-center text-xs text-foreground/40">
-                  + {pendingCount - 3} publicaciones pendientes
-                </p>
-              )}
-              {data.postsTotal === 0 && (
+              {posts.length === 0 ? (
                 <p className="py-8 text-center text-sm text-foreground/40">
                   Las publicaciones aparecerán aquí una vez que inicie la campaña.
+                </p>
+              ) : (
+                posts.map((p) => <PostPreview key={p.id} post={p} />)
+              )}
+              {posts.length > 0 && posts.length < data.postsTotal && (
+                <p className="py-1 text-center text-xs text-foreground/40">
+                  Mostrando {posts.length} de {data.postsTotal} publicaciones
                 </p>
               )}
             </CardContent>

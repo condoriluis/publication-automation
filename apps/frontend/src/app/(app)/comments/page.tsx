@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { Reply, Bot, EyeOff, Eye, Trash2, MessageSquareOff, Loader2, Sparkles } from 'lucide-react';
 
 import { api } from '@/lib/api';
-import type { Paginated, CommentDetail, RiskLevel, CommentStatus } from '@/lib/types';
+import type { Paginated, CommentDetail, RiskLevel, CommentStatus, CommentClassification } from '@/lib/types';
 import { PageHeader } from '@/components/page-header';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,13 +17,24 @@ import { formatRelative } from '@/lib/utils';
 
 const RISKS: (RiskLevel | '')[] = ['', 'NONE', 'LOW', 'MEDIUM', 'HIGH'];
 const STATUSES: (CommentStatus | '')[] = ['', 'VISIBLE', 'HIDDEN', 'RESPONDED', 'DELETED'];
+const CLASSIFICATIONS: (CommentClassification | '')[] = ['', 'INSULTO', 'PREGUNTA', 'SPAM', 'NORMAL', 'OPORTUNIDAD'];
+
+const CLASSIFICATION_LABELS: Record<CommentClassification, { label: string; className: string }> = {
+  INSULTO: { label: 'Insulto', className: '!bg-red-500/10 !text-red-600 dark:!text-red-400' },
+  PREGUNTA: { label: 'Pregunta', className: '!bg-sky-500/10 !text-sky-600 dark:!text-sky-400' },
+  SPAM: { label: 'Spam', className: '!bg-orange-500/10 !text-orange-600 dark:!text-orange-400' },
+  NORMAL: { label: 'Normal', className: '!bg-emerald-500/10 !text-emerald-600 dark:!text-emerald-400' },
+  OPORTUNIDAD: { label: 'Oportunidad', className: '!bg-violet-500/10 !text-violet-600 dark:!text-violet-400' },
+};
 
 export default function CommentsPage() {
   const [data, setData] = useState<Paginated<CommentDetail> | null>(null);
   const [page, setPage] = useState(1);
   const [risk, setRisk] = useState('');
   const [status, setStatus] = useState('');
+  const [classification, setClassification] = useState('');
   const [onlyModeration, setOnlyModeration] = useState(false);
+  const [onlyReview, setOnlyReview] = useState(false);
   const [replyId, setReplyId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
@@ -31,8 +42,8 @@ export default function CommentsPage() {
   const [suggesting, setSuggesting] = useState<string | null>(null);
 
   const buildQuery = useCallback(
-    () => `/comments?page=${page}&limit=10${risk ? `&riskLevel=${risk}` : ''}${status ? `&status=${status}` : ''}${onlyModeration ? '&needsModeration=true' : ''}`,
-    [page, risk, status, onlyModeration],
+    () => `/comments?page=${page}&limit=10${risk ? `&riskLevel=${risk}` : ''}${status ? `&status=${status}` : ''}${classification ? `&classification=${classification}` : ''}${onlyReview ? '&needsReview=true' : ''}${onlyModeration ? '&needsModeration=true' : ''}`,
+    [page, risk, status, classification, onlyModeration, onlyReview],
   );
 
   const load = useCallback(async () => {
@@ -102,8 +113,15 @@ export default function CommentsPage() {
         {STATUSES.map((s, i) => (
           <Button key={s || `s${i}`} size="sm" variant={status === s ? 'default' : 'outline'} onClick={() => { setStatus(s); setPage(1); }}>{s || 'Todos'}</Button>
         ))}
+        <span className="ml-2 mr-1 text-xs font-medium text-foreground/50">Clasificación:</span>
+        {CLASSIFICATIONS.map((cl, i) => (
+          <Button key={cl || `cl${i}`} size="sm" variant={classification === cl ? 'default' : 'outline'} onClick={() => { setClassification(cl); setPage(1); }}>{cl || 'Todas'}</Button>
+        ))}
         <Button size="sm" variant={onlyModeration ? 'default' : 'outline'} onClick={() => { setOnlyModeration(!onlyModeration); setPage(1); }}>
           Solo moderación
+        </Button>
+        <Button size="sm" variant={onlyReview ? 'default' : 'outline'} onClick={() => { setOnlyReview(!onlyReview); setPage(1); }}>
+          Solo revisión
         </Button>
       </div>
 
@@ -124,8 +142,7 @@ export default function CommentsPage() {
                   </div>
                   <span className="text-sm font-medium">{c.fromName ?? 'Anónimo'}</span>
                   <span className="text-xs text-foreground/50">{formatRelative(c.createdAt)}</span>
-                  <span 
-                    className="ml-2 cursor-pointer rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+                  <span className="ml-2 cursor-pointer rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground hover:bg-muted/80 hover:text-foreground"
                     title="Clic para copiar ID"
                     onClick={() => {
                       navigator.clipboard.writeText(c.id);
@@ -135,6 +152,17 @@ export default function CommentsPage() {
                     {c.id}
                   </span>
                   <div className="ml-auto flex items-center gap-1.5">
+                    {c.classification ? (
+                      <span title={`Confianza: ${c.confidence ?? 'n/d'}%`} className={`rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium ${CLASSIFICATION_LABELS[c.classification].className}`}>
+                        {CLASSIFICATION_LABELS[c.classification].label}
+                        {typeof c.confidence === 'number' && <span className="ml-1 font-mono text-[9px] text-foreground/40">{c.confidence}%</span>}
+                      </span>
+                    ) : null}
+                    {c.needsReview && (
+                      <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                        Revisar
+                      </span>
+                    )}
                     <StatusBadge value={c.status} />
                     <StatusBadge value={c.riskLevel} className="!bg-amber-500/10 !text-amber-600 dark:!text-amber-400" />
                   </div>
