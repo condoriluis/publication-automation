@@ -34,6 +34,9 @@ const envSchema = z.object({
   REFRESH_TOKEN_EXPIRES_IN: z.string().default('7d'),
   BCRYPT_ROUNDS: z.coerce.number().int().min(4).max(15).default(12),
 
+  // reCAPTCHA (login) — opcional: si no se define, la verificación se omite
+  RECAPTCHA_SECRET_KEY: z.string().optional(),
+
   // Cifrado AES-256-GCM para tokens de terceros (clave HEX de 32 bytes)
   TOKEN_ENCRYPTION_KEY: z
     .string()
