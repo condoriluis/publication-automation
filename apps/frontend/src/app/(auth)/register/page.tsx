@@ -86,7 +86,7 @@ export default function RegisterPage() {
           </div>
           <h1 className="text-2xl font-bold tracking-tight">Publication Automation</h1>
           <p className="text-sm text-muted-foreground">
-            Bienvenido. Todo listo para configurar tu primer administrador.
+            Gestiona y automatiza tus publicaciones en Facebook
           </p>
         </div>
 
@@ -94,11 +94,10 @@ export default function RegisterPage() {
           <form onSubmit={onSubmit}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <ShieldCheck className="size-5 text-[#1877F2]" /> Configuración inicial
+                <ShieldCheck className="size-5 text-[#1877F2]" /> Crear cuenta
               </CardTitle>
               <CardDescription>
-                Este es el paso único de instalación: crea la cuenta administradora del sistema. Una vez creada,
-                esta página desaparece.
+                Ingresa tus datos para continuar
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -173,7 +172,7 @@ export default function RegisterPage() {
             <CardFooter className="pt-2">
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? <Loader2 className="animate-spin" /> : <ArrowRight />}
-                {loading ? 'Configurando…' : 'Crear administrador'}
+                {loading ? 'Creando…' : 'Crear cuenta'}
               </Button>
             </CardFooter>
           </form>

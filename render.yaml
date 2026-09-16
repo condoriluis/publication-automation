@@ -11,7 +11,7 @@ services:
     runtime: node
     plan: free
     rootDir: .
-    healthCheckPath: /api/health
+    healthCheckPath: /api/v1/health
     buildCommand: npm ci && npm run build:backend
     startCommand: npm run start:backend:prod
     envVars:
