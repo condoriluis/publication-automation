@@ -7,6 +7,7 @@ import { ArrowRight, Eye, EyeOff, Loader2 } from 'lucide-react';
 
 import { useAuthAdmin } from '@/contexts/auth-context';
 import { fetchSetupStatus, getAccessToken } from '@/lib/api';
+import { RecaptchaCheckbox } from '@/components/recaptcha-checkbox';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,18 +18,6 @@ import { MetaLogo } from '@/components/meta-logo';
 const REMEMBER_KEY = 'pa.rememberedEmail';
 const RECAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY ?? '';
 
-/* Tipos globales para el widget reCAPTCHA v2 (render explícito). */
-declare global {
-  interface Window {
-    paRecaptchaLoaded?: () => void;
-    grecaptcha?: {
-      render(el: HTMLElement, options: Record<string, unknown>): number;
-      getResponse(widgetId?: number): string | null;
-      reset(widgetId?: number): void;
-    };
-  }
-}
-
 export default function LoginPage() {
   const router = useRouter();
   const { login } = useAuthAdmin();
@@ -37,47 +26,9 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = React.useState(false);
   const [form, setForm] = React.useState({ email: '', password: '' });
 
-  /* --- reCAPTCHA v2 checkbox --- */
-  const captureRef = React.useRef<HTMLDivElement>(null);
-  const widgetIdRef = React.useRef<number | undefined>(undefined);
-  const tokenRef = React.useRef<string | null>(null);
-
-  React.useEffect(() => {
-    if (!RECAPTCHA_SITE_KEY) return;
-
-    const renderWidget = () => {
-      if (!captureRef.current || !window.grecaptcha?.render) return;
-      if (captureRef.current.childElementCount > 0) return;
-      const id = window.grecaptcha.render(captureRef.current, {
-        sitekey: RECAPTCHA_SITE_KEY,
-        theme: 'dark',
-        size: 'normal',
-        callback: () => {
-          tokenRef.current = window.grecaptcha?.getResponse(id) ?? null;
-        },
-      });
-      if (id !== undefined) widgetIdRef.current = id;
-    };
-
-    window.paRecaptchaLoaded = renderWidget;
-
-    let script = document.getElementById('pa-recaptcha') as HTMLScriptElement | null;
-    if (!script) {
-      script = document.createElement('script');
-      script.id = 'pa-recaptcha';
-      script.src = 'https://www.google.com/recaptcha/api.js?render=explicit&onload=paRecaptchaLoaded';
-      script.async = true;
-      script.defer = true;
-      document.body.appendChild(script);
-    } else if (window.grecaptcha?.render) {
-      renderWidget();
-    }
-  }, []);
-
-  const resetCaptcha = React.useCallback(() => {
-    window.grecaptcha?.reset(widgetIdRef.current ?? undefined);
-    tokenRef.current = null;
-  }, []);
+  /* --- reCAPTCHA v2: token + reset controlado por el padre --- */
+  const [captchaToken, setCaptchaToken] = React.useState<string | null>(null);
+  const [captchaReset, setCaptchaReset] = React.useState(0);
 
   /* Redirige a /register si la BD está vacía */
   React.useEffect(() => {
@@ -108,13 +59,12 @@ export default function LoginPage() {
     /* Validar token si el widget está activo */
     let recaptchaToken: string | undefined;
     if (RECAPTCHA_SITE_KEY) {
-      const token = tokenRef.current;
-      if (!token) {
+      if (!captchaToken) {
         toast.error("Marca la casilla 'No soy un robot' para continuar.");
         setLoading(false);
         return;
       }
-      recaptchaToken = token;
+      recaptchaToken = captchaToken;
     }
 
     try {
@@ -128,7 +78,7 @@ export default function LoginPage() {
       toast.success('Bienvenido de vuelta');
       router.push('/dashboard');
     } catch (err) {
-      if (RECAPTCHA_SITE_KEY) resetCaptcha();
+      if (RECAPTCHA_SITE_KEY) setCaptchaReset((n) => n + 1);
       toast.error(err instanceof Error ? err.message : 'No se pudo iniciar sesión');
       setLoading(false);
     }
@@ -204,7 +154,7 @@ export default function LoginPage() {
               </div>
 
               {RECAPTCHA_SITE_KEY ? (
-                <div className="flex justify-center min-h-[78px] rounded-lg" ref={captureRef} />
+                <RecaptchaCheckbox onToken={setCaptchaToken} resetSignal={captchaReset} />
               ) : null}
             </CardContent>
 

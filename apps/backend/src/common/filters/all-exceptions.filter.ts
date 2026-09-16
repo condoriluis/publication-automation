@@ -88,11 +88,19 @@ export class AllExceptionsFilter extends BaseExceptionFilter implements Exceptio
       }
     }
 
-    // Log de error guardando el error aunque no tengamos stack útil
+    // Log: 5xx son errores de servidor (con stack); los 4xx se loguean como
+    // warn del request, sin ruido de stack (404/401/403/400 son esperables).
+    const isServerError = status >= HttpStatus.INTERNAL_SERVER_ERROR;
     if (exception instanceof Error && exception.stack) {
-      this.logger.error(`${req.method} ${req.originalUrl} -> ${status}`, exception.stack, 'Filter');
+      if (isServerError) {
+        this.logger.error(`${req.method} ${req.originalUrl} -> ${status}`, exception.stack, 'Filter');
+      } else {
+        this.logger.warn(`${req.method} ${req.originalUrl} -> ${status}`, 'Filter');
+      }
     } else {
-      this.logger.error(`${req.method} ${req.originalUrl} -> ${status} :: ${message}`, undefined, 'Filter');
+      const msg = `${req.method} ${req.originalUrl} -> ${status} :: ${message}`;
+      if (isServerError) this.logger.error(msg, undefined, 'Filter');
+      else this.logger.warn(msg, 'Filter');
     }
 
     const body: ApiErrorBody = {

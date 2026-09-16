@@ -16,7 +16,7 @@ const apiSource = /^https?:\/\//.test(apiUrl) ? new URL(apiUrl).origin : 'self';
 
 /**
  * CSP básico de referencia.
- * Se permiten los dominios de Google necesarios para reCAPTCHA v3
+ * Se permiten los dominios de Google necesarios para reCAPTCHA v2
  * (www.google.com y www.gstatic.com). Mientras exista 'unsafe-inline'/'unsafe-eval'
  * será una CSP de partida; se puede afinar después perdiendo esos comodines.
  */

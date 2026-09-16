@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { ValidationPipe, VersioningType } from '@nestjs/common';
+import { HttpStatus, ValidationPipe, VersioningType } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
@@ -68,6 +68,22 @@ async function bootstrap(): Promise<void> {
   // ---- Prefijo global + versionado ----
   app.setGlobalPrefix('api');
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
+
+  // ---- Ruta raíz pública (GET/HEAD /) para probes externas (Render, Uptime, LB) ----
+  const adapter = app.getHttpAdapter();
+  const rootInfo = () => ({
+    service: 'publication-automation-api',
+    status: 'ok',
+    version: '1.0.0',
+    endpoints: {
+      api: '/api/v1',
+      health: '/api/v1/health',
+      docs: appConfig.isProd ? undefined : '/api/v1/docs',
+    },
+    timestamp: new Date().toISOString(),
+  });
+  adapter.get('/', (_req: unknown, res: any) => res.status(HttpStatus.OK).json(rootInfo()));
+  adapter.head('/', (_req: unknown, res: any) => res.status(HttpStatus.OK).send());
 
   // ---- Swagger solo en no-producción ----
   if (!appConfig.isProd) {
