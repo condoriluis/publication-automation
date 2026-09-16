@@ -28,7 +28,7 @@ prisma/*.db
 prisma/*.db-journal
 
 # logs
-logs/
+/logs/
 *.log
 npm-debug.log*
 pnpm-debug.log*
