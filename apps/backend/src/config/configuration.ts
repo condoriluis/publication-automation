@@ -18,6 +18,14 @@ export const configuration = () => ({
     retryBackoffMs: parseInt(process.env.WORKER_RETRY_BACKOFF_MS ?? '30000', 10),
   },
 
+  // Sondeo automático de comentarios (alternativa/suplencia a los webhooks)
+  commentPoll: {
+    intervalMs: parseInt(process.env.COMMENT_POLL_INTERVAL_MIN ?? '10', 10) * 60_000,
+    windowHours: parseInt(process.env.COMMENT_POLL_WINDOW_HOURS ?? '24', 10),
+    maxPostsPerPage: parseInt(process.env.COMMENT_POLL_MAX_POSTS ?? '10', 10),
+    pageDelayMs: parseInt(process.env.COMMENT_POLL_PAGE_DELAY_MS ?? '250', 10),
+  },
+
   jwt: {
     secret: process.env.JWT_SECRET,
     expiresIn: process.env.JWT_EXPIRES_IN ?? '1d',

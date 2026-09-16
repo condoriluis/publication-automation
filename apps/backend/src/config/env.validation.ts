@@ -27,6 +27,12 @@ const envSchema = z.object({
   WORKER_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(50).default(5),
   WORKER_RETRY_BACKOFF_MS: z.coerce.number().int().min(0).default(30000),
 
+  // Sondeo automático de comentarios (alternativa a webhooks sin publicar la app)
+  COMMENT_POLL_INTERVAL_MIN: z.coerce.number().int().min(1).max(60).default(10),
+  COMMENT_POLL_WINDOW_HOURS: z.coerce.number().int().min(1).max(24 * 30).default(24),
+  COMMENT_POLL_MAX_POSTS: z.coerce.number().int().min(1).max(100).default(10),
+  COMMENT_POLL_PAGE_DELAY_MS: z.coerce.number().int().min(0).max(10_000).default(250),
+
   // Seguridad / JWT
   JWT_SECRET: z.string().min(32, 'JWT_SECRET debe tener al menos 32 caracteres'),
   JWT_EXPIRES_IN: z.string().default('1d'),

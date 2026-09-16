@@ -99,16 +99,49 @@ export class CommentsService {
       throw new NotFoundException('La publicación aún no ha sido publicada en Meta (sin metaObjectId)');
     }
 
+    const result = await this.ingestCommentsForPost(post);
+
+    await this.audit.record({
+      action: 'comment.sync',
+      category: LogCategory.COMMENT,
+      userId,
+      pageId: post.pageId,
+      postId,
+      metadata: { synced: result.synced, skipped: result.skipped },
+    });
+
+    return result;
+  }
+
+  /**
+   * Sincroniza los comentarios de un post ya publicado en Meta (idempotente).
+   * Usado por el sondeo automático; no audita (el worker registra su rastro).
+   */
+  async syncFromMeta(post: { id: string; pageId: string; metaObjectId: string | null }): Promise<{
+    synced: number;
+    skipped: number;
+  }> {
+    return this.ingestCommentsForPost(post);
+  }
+
+  private async ingestCommentsForPost(post: {
+    id: string;
+    pageId: string;
+    metaObjectId: string | null;
+  }): Promise<{ synced: number; skipped: number }> {
+    const { id: postId, pageId, metaObjectId } = post;
+    if (!metaObjectId) return { synced: 0, skipped: 0 };
+
     let synced = 0;
     let skipped = 0;
     let after: string | undefined;
     const newCommentIds: string[] = [];
 
     do {
-      const page = await this.facebook.getPostComments(post.metaObjectId, post.pageId, { limit: 100, after });
+      const page = await this.facebook.getPostComments(metaObjectId, pageId, { limit: 100, after });
       for (const meta of page.data ?? []) {
         const data = {
-          pageId: post.pageId,
+          pageId,
           metaCommentId: meta.id,
           fromUserId: meta.from?.id ?? null,
           fromName: meta.from?.name ?? null,
@@ -134,14 +167,6 @@ export class CommentsService {
       after = page.paging?.cursors?.after;
     } while (after);
 
-    await this.audit.record({
-      action: 'comment.sync',
-      category: LogCategory.COMMENT,
-      userId,
-      pageId: post.pageId,
-      postId,
-      metadata: { synced, skipped },
-    });
     this.logger.log(`Sincronización de comentarios: ${synced} nuevos, ${skipped} ya respondidos (post ${postId})`);
 
     // Disparar automatización (clasificación + reglas) para los comentarios nuevos

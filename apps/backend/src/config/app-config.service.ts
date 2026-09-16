@@ -42,6 +42,18 @@ export class AppConfigService {
   get workerRetryBackoffMs(): number {
     return this.all.worker.retryBackoffMs;
   }
+  get commentPollIntervalMs(): number {
+    return this.all.commentPoll.intervalMs;
+  }
+  get commentPollWindowHours(): number {
+    return this.all.commentPoll.windowHours;
+  }
+  get commentPollMaxPosts(): number {
+    return this.all.commentPoll.maxPostsPerPage;
+  }
+  get commentPollPageDelayMs(): number {
+    return this.all.commentPoll.pageDelayMs;
+  }
   get jwtSecret(): string {
     return this.all.jwt.secret!;
   }

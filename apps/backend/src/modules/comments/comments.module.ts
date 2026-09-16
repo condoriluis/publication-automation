@@ -9,13 +9,20 @@ import { CommentsController } from './comments.controller';
 import { CommentsService } from './comments.service';
 import { CommentAutomationService } from './comment-automation.service';
 import { CommentWorkerService } from './comment-worker.service';
+import { CommentPollWorkerService } from './comment-poll.service';
 import { CommentRulesService } from './comment-rules.service';
 import { CommentRulesController } from './comment-rules.controller';
 
 @Module({
   imports: [PaginationModule, CampaignExecutionModule, FacebookModule, AiModule, AuditModule],
   controllers: [CommentsController, CommentRulesController],
-  providers: [CommentsService, CommentAutomationService, CommentWorkerService, CommentRulesService],
+  providers: [
+    CommentsService,
+    CommentAutomationService,
+    CommentWorkerService,
+    CommentPollWorkerService,
+    CommentRulesService,
+  ],
   exports: [CommentsService, CommentAutomationService],
 })
 export class CommentsModule {}
