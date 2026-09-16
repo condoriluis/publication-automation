@@ -61,6 +61,11 @@ export class CreateCampaignDto {
   @IsUrl({ require_protocol: true })
   videoUrl?: string;
 
+  @ApiPropertyOptional({ description: 'URL de enlace externo (genera tarjeta de vista previa en Facebook)' })
+  @IsOptional()
+  @IsUrl({ require_protocol: true })
+  linkUrl?: string;
+
   @ApiProperty({ description: 'Grupos programados de la campaña (distribución de acciones)' })
   @IsArray()
   @ValidateNested({ each: true })

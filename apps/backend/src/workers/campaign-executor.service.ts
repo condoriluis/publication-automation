@@ -55,6 +55,7 @@ export class CampaignExecutorService {
         message: post.content,
         imageUrls: (post.imageUrls as string[] | null) ?? undefined,
         videoUrl: post.videoUrl ?? undefined,
+        linkUrl: post.linkUrl ?? undefined,
       });
       metaObjectId = result.id;
       metaPermalinkUrl = result.permalink;

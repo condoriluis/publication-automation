@@ -119,6 +119,7 @@ export interface CreateCampaignPayload {
   contentTemplate: string;
   imageUrls?: string[];
   videoUrl?: string;
+  linkUrl?: string;
   groups: CampaignGroupInput[];
   totalActions: number;
   intervalSeconds?: number;
@@ -150,6 +151,7 @@ export interface Campaign {
   contentTemplate: string;
   imageUrls: string[];
   videoUrl: string | null;
+  linkUrl: string | null;
   totalActions: number;
   intervalSeconds: number;
   groupsWaitSeconds: number;
@@ -208,6 +210,7 @@ export interface CreatePostPayload {
   content: string;
   imageUrls?: string[];
   videoUrl?: string;
+  linkUrl?: string;
   scheduledFor?: string;
   aiGenerated?: boolean;
 }
@@ -227,6 +230,7 @@ export interface PostDetail {
   content: string;
   imageUrls: string[];
   videoUrl: string | null;
+  linkUrl: string | null;
   scheduledFor: string | null;
   publishedAt: string | null;
   metaObjectId: string | null;
@@ -249,6 +253,7 @@ export interface PostListRow {
   campaignId: string | null;
   imageUrls: string[];
   videoUrl: string | null;
+  linkUrl: string | null;
   scheduledFor: string | null;
   publishedAt: string | null;
   metaPermalinkUrl: string | null;

@@ -222,6 +222,7 @@ export class CampaignWorkerService {
             content,
             imageUrls: (group.campaign.imageUrls as string[] | null) ?? [],
             videoUrl: group.campaign.videoUrl,
+            linkUrl: group.campaign.linkUrl,
             status: PostStatus.SCHEDULED,
             aiGenerated: group.campaign.aiGenerated,
             aiProvider: group.campaign.aiProvider,

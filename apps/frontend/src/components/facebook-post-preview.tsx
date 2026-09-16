@@ -88,9 +88,35 @@ interface FacebookPostPreviewProps {
   content: string;
   imageUrls?: string[];
   videoUrl?: string | null;
+  linkUrl?: string | null;
   timeLabel?: string;
   feedLabel?: string;
   headerExtra?: React.ReactNode;
+}
+
+function LinkCard({ url }: { url: string }) {
+  let hostname = url;
+  try {
+    hostname = new URL(url).hostname;
+  } catch {
+    // URL aún incompleta durante el tipeo: se muestra como está
+  }
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="mt-3 block overflow-hidden rounded-lg border border-black/5 bg-zinc-100 dark:bg-zinc-800"
+    >
+      <div className="flex aspect-[16/9] w-full items-center justify-center bg-zinc-900">
+        <span className="max-w-[80%] truncate text-sm font-semibold text-white/80">{hostname}</span>
+      </div>
+      <div className="space-y-1 px-3 py-2">
+        <p className="text-[15px] font-semibold leading-snug text-foreground">{hostname}</p>
+        <p className="truncate text-[13px] text-muted-foreground">{url}</p>
+      </div>
+    </a>
+  );
 }
 
 export function FacebookPostPreview({
@@ -99,6 +125,7 @@ export function FacebookPostPreview({
   content,
   imageUrls = [],
   videoUrl = null,
+  linkUrl = null,
   timeLabel = 'Justo ahora',
   feedLabel = 'Publicación de la página',
   headerExtra,
@@ -153,6 +180,8 @@ export function FacebookPostPreview({
           ),
         )}
       </p>
+
+      {linkUrl ? <LinkCard url={linkUrl} /> : null}
 
       {/* Media */}
       {videoUrl ? (

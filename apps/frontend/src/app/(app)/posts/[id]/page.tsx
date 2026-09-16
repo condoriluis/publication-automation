@@ -107,6 +107,7 @@ export default function PostDetailPage() {
             content={post.content}
             imageUrls={post.imageUrls}
             videoUrl={post.videoUrl}
+            linkUrl={post.linkUrl}
             timeLabel={post.publishedAt ? formatDate(post.publishedAt) : '—'}
             headerExtra={
               <div className="flex shrink-0 items-center gap-2">

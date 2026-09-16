@@ -19,6 +19,11 @@ export class UpdatePostDto {
   @IsUrl({ require_protocol: true })
   videoUrl?: string;
 
+  @ApiPropertyOptional({ description: 'URL de enlace externo (genera tarjeta de vista previa en Facebook)' })
+  @IsOptional()
+  @IsUrl({ require_protocol: true })
+  linkUrl?: string;
+
   @ApiPropertyOptional({ description: 'Programación futura (ISO 8601)' })
   @IsOptional()
   @IsDateString()

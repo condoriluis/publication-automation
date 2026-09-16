@@ -31,6 +31,8 @@ export default function NewPostPage() {
     content: '',
     imageUrls: '',
     videoUrl: '',
+    useLink: false,
+    linkUrl: '',
     scheduledFor: '',
     aiGenerated: false,
   });
@@ -75,6 +77,7 @@ export default function NewPostPage() {
         content: form.content,
         imageUrls: form.imageUrls.split(',').map((s) => s.trim()).filter(Boolean),
         videoUrl: form.videoUrl.trim() || undefined,
+        linkUrl: form.useLink && form.linkUrl.trim() ? form.linkUrl.trim() : undefined,
         scheduledFor: form.scheduledFor ? new Date(form.scheduledFor).toISOString() : undefined,
         aiGenerated: form.aiGenerated,
       });
@@ -149,6 +152,25 @@ export default function NewPostPage() {
                 <Label htmlFor="vid">URL de video (opcional)</Label>
                 <Input id="vid" value={form.videoUrl} onChange={(e) => setForm({ ...form, videoUrl: e.target.value })} />
               </div>
+              <div className="flex items-center space-x-2 sm:col-span-2 mt-2">
+                <Checkbox
+                  id="useLink"
+                  checked={form.useLink}
+                  onCheckedChange={(checked) => setForm({ ...form, useLink: checked === true, linkUrl: checked === true ? form.linkUrl : '' })}
+                />
+                <Label htmlFor="useLink" className="text-sm font-normal cursor-pointer">
+                  Agregar enlace (URL de página)
+                </Label>
+              </div>
+              {form.useLink ? (
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="link">URL del enlace</Label>
+                  <Input id="link" value={form.linkUrl} onChange={(e) => setForm({ ...form, linkUrl: e.target.value })} placeholder="https://…" />
+                  <p className="text-[11px] text-muted-foreground">
+                    Facebook generará una tarjeta de vista previa con el título e imagen de la página. No se combina con imágenes ni video.
+                  </p>
+                </div>
+              ) : null}
               <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor="sched">Programar para (vacío = borrador)</Label>
                 <DateTimePicker value={form.scheduledFor} onChange={(val) => setForm({ ...form, scheduledFor: val })} />
@@ -176,8 +198,9 @@ export default function NewPostPage() {
               pagePicture={pages?.data.find((p) => p.id === form.pageId)?.pictureUrl ?? null}
               content={form.content}
               imageUrls={form.imageUrls.split(',').map((s) => s.trim()).filter(Boolean)}
-              videoUrl={form.videoUrl.trim() || null}
-              timeLabel={form.scheduledFor ? `Programada para ${new Date(form.scheduledFor).toLocaleString('es')}` : 'Borrador'}
+          videoUrl={form.videoUrl.trim() || null}
+          linkUrl={form.useLink && form.linkUrl.trim() ? form.linkUrl.trim() : null}
+          timeLabel={form.scheduledFor ? `Programada para ${new Date(form.scheduledFor).toLocaleString('es')}` : 'Borrador'}
             />
           </div>
         </div>

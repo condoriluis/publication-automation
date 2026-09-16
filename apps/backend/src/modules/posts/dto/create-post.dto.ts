@@ -25,6 +25,11 @@ export class CreatePostDto {
   @IsUrl({ require_protocol: true })
   videoUrl?: string;
 
+  @ApiPropertyOptional({ description: 'URL de enlace externo (genera tarjeta de vista previa en Facebook)' })
+  @IsOptional()
+  @IsUrl({ require_protocol: true })
+  linkUrl?: string;
+
   @ApiPropertyOptional({ description: 'Campaña a la que pertenece el post' })
   @IsOptional()
   @IsString()

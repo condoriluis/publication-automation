@@ -25,6 +25,7 @@ export interface PagePublishInput {
   message: string;
   imageUrls?: string[];
   videoUrl?: string;
+  linkUrl?: string;
 }
 
 export interface PagePublishResult {
@@ -144,6 +145,8 @@ export class FacebookService {
    * Publica un post en la página. Devuelve { id, permalink }.
    * - Con imageUrls: sube cada foto (published:false) y las adjunta vía attached_media.
    * - Con videoUrl: publica video con descripción (no combinable con imágenes).
+   * - Con linkUrl: post de enlace (message + link) → Facebook genera la tarjeta
+   *   de vista previa desde los metadatos OpenGraph del destino.
    * - Sin media: feed de texto/links.
    */
   async publishToPage(pageId: string, input: PagePublishInput): Promise<PagePublishResult> {
@@ -158,6 +161,14 @@ export class FacebookService {
     }
 
     const params: Record<string, unknown> = { access_token: token, message: input.message };
+
+    if (input.linkUrl) {
+      params.link = input.linkUrl;
+      const post = await this.request<{ id: string }>('POST', `/${page.facebookPageId}/feed`, { params });
+      const permalink = await this.fetchPermalink(post.id, token);
+      return { id: post.id, permalink };
+    }
+
     if (input.imageUrls?.length) {
       const media: Array<{ media_fbid: string }> = [];
       for (const url of input.imageUrls.slice(0, 8)) {

@@ -53,6 +53,8 @@ function NewCampaignContent() {
     endsAt: '',
     imageUrls: '',
     videoUrl: '',
+    useLink: false,
+    linkUrl: '',
     aiGenerated: searchParams.has('content'),
   });
   const [groups, setGroups] = useState<GroupDraft[]>([EMPTY_GROUP]);
@@ -99,6 +101,7 @@ function NewCampaignContent() {
         endsAt: form.endsAt ? new Date(form.endsAt).toISOString() : undefined,
         imageUrls: form.imageUrls ? form.imageUrls.split(',').map((u) => u.trim()) : undefined,
         videoUrl: form.videoUrl || undefined,
+        linkUrl: form.useLink && form.linkUrl.trim() ? form.linkUrl.trim() : undefined,
         aiGenerated: form.aiGenerated,
       });
       toast.success('Campaña creada');
@@ -186,6 +189,25 @@ function NewCampaignContent() {
                 <Label htmlFor="vid">URL de video (opcional)</Label>
                 <Input id="vid" value={form.videoUrl} onChange={(e) => setForm({ ...form, videoUrl: e.target.value })} />
               </div>
+              <div className="flex items-center space-x-2 sm:col-span-2 mt-2">
+                <Checkbox
+                  id="useLink"
+                  checked={form.useLink}
+                  onCheckedChange={(checked) => setForm({ ...form, useLink: checked === true, linkUrl: checked === true ? form.linkUrl : '' })}
+                />
+                <Label htmlFor="useLink" className="text-sm font-normal cursor-pointer">
+                  Agregar enlace (URL de página)
+                </Label>
+              </div>
+              {form.useLink ? (
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="link">URL del enlace</Label>
+                  <Input id="link" value={form.linkUrl} onChange={(e) => setForm({ ...form, linkUrl: e.target.value })} placeholder="https://…" />
+                  <p className="text-[11px] text-muted-foreground">
+                    Facebook generará una tarjeta de vista previa en cada post de la campaña. No se combina con imágenes ni video.
+                  </p>
+                </div>
+              ) : null}
               <Field label="Número de publicaciones" hint="Máx. 10.000">
                 <Input type="number" min={1} max={10000} value={form.totalActions} onChange={(e) => setForm({ ...form, totalActions: e.target.value })} required />
               </Field>
@@ -257,6 +279,7 @@ function NewCampaignContent() {
               content={form.contentTemplate}
               imageUrls={form.imageUrls.split(',').map((s) => s.trim()).filter(Boolean)}
               videoUrl={form.videoUrl.trim() || null}
+              linkUrl={form.useLink && form.linkUrl.trim() ? form.linkUrl.trim() : null}
               timeLabel={form.startAt ? `Desde el ${new Date(form.startAt).toLocaleString('es')}` : 'En espera de inicio'}
             />
           </div>

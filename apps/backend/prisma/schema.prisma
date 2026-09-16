@@ -205,6 +205,7 @@ model Campaign {
   contentTemplate  String
   imageUrls        Json?
   videoUrl         String?
+  linkUrl          String?
   // Distribución por grupos: cada grupo % + intervalo interno + espera posterior
   groups           Json?    // verseed: CampaignGroup schedule en runtime
   totalActions     Int
@@ -295,6 +296,7 @@ model Post {
   content       String
   imageUrls     Json?
   videoUrl      String?
+  linkUrl       String?
   scheduledFor  DateTime?
   publishedAt   DateTime?
   // Referencia al post creado en el Graph API de Meta
