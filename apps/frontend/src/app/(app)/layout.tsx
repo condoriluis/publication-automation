@@ -1,9 +1,9 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   Menu, X, ChevronLeft, ChevronRight,
   Plus, Megaphone,
@@ -15,13 +15,25 @@ import { Button } from '@/components/ui/button';
 import { UserChip } from '@/components/user-chip';
 import { MetaLogo } from '@/components/meta-logo';
 import { ThemeToggle } from '@/components/theme-toggle';
-
+import { useAuthAdmin } from '@/contexts/auth-context';
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
+  const router = useRouter();
+  const { isAuthenticated, isLoading } = useAuthAdmin();
+
   // Desktop: sidebar collapsed/expanded
   const [collapsed, setCollapsed] = useState(false);
   // Mobile: sidebar open/closed (overlay)
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      router.replace('/login');
+    }
+  }, [isLoading, isAuthenticated, router]);
+
+  // Sin sesión: no renderizar contenido protegido mientras se redirige.
+  if (!isLoading && !isAuthenticated) return null;
 
   const closeMobile = useCallback(() => setMobileOpen(false), []);
   const toggleCollapse = useCallback(() => setCollapsed((c) => !c), []);

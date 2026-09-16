@@ -399,6 +399,7 @@ export interface AuditFilters {
   page?: number;
   limit?: number;
   action?: string;
+  category?: AuditLogItem['category'];
   userId?: string;
   pageId?: string;
   campaignId?: string;
@@ -427,6 +428,7 @@ export interface AuditLogItem {
   metadata: Record<string, unknown> | null;
   ipAddress: string | null;
   userAgent: string | null;
+  user?: { displayName: string; email: string } | null;
   createdAt: string;
 }
 

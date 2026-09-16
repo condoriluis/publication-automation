@@ -1,4 +1,5 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { LogCategory } from '@prisma/client';
 import { Roles } from '../../common/decorators/auth.decorators';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
@@ -17,6 +18,7 @@ export class AuditController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('action') action?: string,
+    @Query('category') category?: string,
     @Query('userId') userId?: string,
     @Query('pageId') pageId?: string,
     @Query('campaignId') campaignId?: string,
@@ -24,7 +26,15 @@ export class AuditController {
     @Query('to') to?: string,
   ) {
     return this.audit.findAll(
-      { action, userId, pageId, campaignId, from, to },
+      {
+        action,
+        category: category && Object.values(LogCategory).includes(category as LogCategory) ? (category as LogCategory) : undefined,
+        userId,
+        pageId,
+        campaignId,
+        from,
+        to,
+      },
       parsePageOptions({ page, limit }),
     );
   }

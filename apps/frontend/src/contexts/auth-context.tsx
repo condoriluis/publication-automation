@@ -126,16 +126,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
   );
 
   const logout = useCallback(async (): Promise<void> => {
-    try {
-      const refreshToken = getRefreshToken();
-      if (refreshToken) {
-        await apiClient.post('/auth/logout', { refreshToken });
-      }
-    } catch {
-
-    } finally {
-      clearSession();
+    const refreshToken = getRefreshToken();
+    if (refreshToken) {
+      void apiClient.post('/auth/logout', { refreshToken }).catch(() => undefined);
     }
+    clearSession();
   }, [clearSession]);
 
   const value = useMemo<AuthContextValue>(

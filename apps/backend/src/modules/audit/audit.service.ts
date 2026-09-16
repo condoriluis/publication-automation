@@ -17,6 +17,7 @@ export interface AuditRecordInput {
 
 export interface AuditFilters {
   action?: string;
+  category?: LogCategory;
   userId?: string;
   pageId?: string;
   campaignId?: string;
@@ -53,6 +54,7 @@ export class AuditService {
   ): Promise<Paginated<AuditLog>> {
     const where: Prisma.AuditLogWhereInput = {};
     if (filters.action) where.action = filters.action;
+    if (filters.category) where.category = filters.category;
     if (filters.userId) where.userId = filters.userId;
     if (filters.pageId) where.pageId = filters.pageId;
     if (filters.campaignId) where.campaignId = filters.campaignId;
@@ -68,6 +70,7 @@ export class AuditService {
         orderBy: { createdAt: 'desc' },
         skip: options.skip,
         take: options.take,
+        include: { user: { select: { displayName: true, email: true } } },
       }),
       this.prisma.auditLog.count({ where }),
     ]);
