@@ -51,7 +51,7 @@ const envSchema = z.object({
   META_OAUTH_SCOPES: z
     .string()
     .default(
-      'email,pages_show_list,pages_read_engagement,pages_manage_posts,pages_manage_engagement,business_management',
+      'email,pages_show_list,pages_read_engagement,pages_manage_posts,pages_manage_engagement,pages_manage_metadata,business_management',
     ),
   META_OAUTH_REDIRECT_URI: z.string().url(),
   META_WEBHOOK_VERIFY_TOKEN: z.string().min(1),
