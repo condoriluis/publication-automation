@@ -1,7 +1,8 @@
 'use client';
 
 import * as React from 'react';
-import { notFound, useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { ArrowRight, Eye, EyeOff, Loader2, ShieldCheck } from 'lucide-react';
 
@@ -33,8 +34,8 @@ export default function RegisterPage() {
       const requiresSetup = await fetchSetupStatus();
       if (cancelled) return;
       if (!requiresSetup) {
-        // El primer administrador ya existe: esta ruta deja de existir.
-        notFound();
+        // Ya existe al menos un administrador: el registro está cerrado.
+        router.replace('/login');
         return;
       }
       setChecking(false);
@@ -178,9 +179,13 @@ export default function RegisterPage() {
           </form>
         </Card>
 
-        <p className="mt-6 text-center text-xs text-muted-foreground">
-          © {new Date().getFullYear()} Publication Automation
-        </p>
+        <footer className="mt-6 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center text-xs text-muted-foreground">
+          <span>© {new Date().getFullYear()} Publication Automation</span>
+          <span aria-hidden="true" className="text-muted-foreground/50">·</span>
+          <Link href="/privacy" className="transition-colors hover:text-foreground underline-offset-4 hover:underline">
+            Política de Privacidad
+          </Link>
+        </footer>
       </div>
     </div>
   );

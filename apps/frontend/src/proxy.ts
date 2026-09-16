@@ -5,7 +5,11 @@ export function proxy(request: NextRequest) {
   const token = request.cookies.get('pa.accessToken')?.value;
   const path = request.nextUrl.pathname;
 
-  const isPublicPath = path === '/login' || path === '/register' || path.startsWith('/oauth/');
+  const isPublicPath =
+    path === '/login' ||
+    path === '/register' ||
+    path === '/privacy' ||
+    path.startsWith('/oauth/');
 
   if (!token && !isPublicPath) {
     const loginUrl = new URL('/login', request.url);

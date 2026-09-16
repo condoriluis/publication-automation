@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { ArrowRight, Eye, EyeOff, Loader2 } from 'lucide-react';
@@ -167,9 +168,13 @@ export default function LoginPage() {
           </form>
         </Card>
 
-        <p className="mt-6 text-center text-xs text-muted-foreground">
-          © {new Date().getFullYear()} Publication Automation
-        </p>
+        <footer className="mt-6 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center text-xs text-muted-foreground">
+          <span>© {new Date().getFullYear()} Publication Automation</span>
+          <span aria-hidden="true" className="text-muted-foreground/50">·</span>
+          <Link href="/privacy" className="transition-colors hover:text-foreground underline-offset-4 hover:underline">
+            Política de Privacidad
+          </Link>
+        </footer>
       </div>
     </div>
   );
