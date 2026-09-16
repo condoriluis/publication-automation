@@ -277,11 +277,10 @@ export class CommentsService {
   // ---------------------------------------------------------------------------
 
   /**
-   * Crea (o devuelve si ya existe) un comentario entrante desde el webhook.
-   * Idempotente por metaCommentId; el webhook solo notifica, la sincronización
-   * completa queda a cargo de `syncFromFacebook`.
+   * Crea un comentario entrante desde el webhook de Meta (verb=add).
+   * Idempotente por metaCommentId: si ya existe devuelve created=false.
    */
-  async handleIncomingComment(input: {
+  async createIncomingComment(input: {
     metaCommentId: string;
     pageId: string;
     postId: string;
@@ -311,6 +310,57 @@ export class CommentsService {
       },
     });
     return { comment: created, created: true };
+  }
+
+  /**
+   * Actualiza un comentario existente ante un evento webhook (verb=edited).
+   * Solo toca contenido (message/from/time); nunca sobreescribe status ni actions.
+   * Devuelve null si el comentario no existe aún (lo creará el verbo add).
+   */
+  async updateIncomingComment(
+    metaCommentId: string,
+    input: { message?: string; fromUserId?: string; fromName?: string; createdAt?: Date },
+  ): Promise<Comment | null> {
+    const existing = await this.prisma.comment.findUnique({ where: { metaCommentId } });
+    if (!existing) return null;
+    return this.prisma.comment.update({
+      where: { id: existing.id },
+      data: {
+        ...(input.message !== undefined ? { message: input.message } : {}),
+        ...(input.fromUserId !== undefined ? { fromUserId: input.fromUserId || null } : {}),
+        ...(input.fromName !== undefined ? { fromName: input.fromName || null } : {}),
+        ...(input.createdAt ? { createdAt: input.createdAt } : {}),
+      },
+    });
+  }
+
+  /**
+   * Aplica eventos de moderación del webhook (remove/hide/unhide/spam/approve)
+   * sobre el registro local, preservando acciones y demás metadatos.
+   * - deleted → status DELETED + isHidden
+   * - hidden=true → status HIDDEN + isHidden
+   * - hidden=false → isHidden=false (solo restaura el status HIDDEN→VISIBLE)
+   */
+  async applyIncomingModeration(
+    metaCommentId: string,
+    change: { deleted?: boolean; hidden?: boolean },
+  ): Promise<Comment | null> {
+    const existing = await this.prisma.comment.findUnique({ where: { metaCommentId } });
+    if (!existing) return null;
+
+    const data: Prisma.CommentUpdateInput = {};
+    if (change.deleted) {
+      data.status = CommentStatus.DELETED;
+      data.isHidden = true;
+    } else if (change.hidden === true) {
+      data.status = CommentStatus.HIDDEN;
+      data.isHidden = true;
+    } else if (change.hidden === false) {
+      data.isHidden = false;
+      if (existing.status === CommentStatus.HIDDEN) data.status = CommentStatus.VISIBLE;
+    }
+
+    return this.prisma.comment.update({ where: { id: existing.id }, data });
   }
 
   // ---------------------------------------------------------------------------

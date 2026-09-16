@@ -6,9 +6,14 @@ import { AppLogger } from '../../common/logger/app-logger.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { FacebookService } from '../facebook/facebook.service';
 import { AuditService } from '../audit/audit.service';
+import { CommentAutomationService } from './comment-automation.service';
 
 const POLL_INTERVAL_MS = 10_000;
 const LEASE_MS = 60_000;
+/** Antigüedad mínima para reinspeccionar un comentario sin analizar. */
+const RECOVERY_AGE_MS = 120_000;
+/** Máximo de comentarios rescatados por ciclo (evita ráfagas de IA). */
+const RECOVERY_BATCH = 5;
 
 @Injectable()
 export class CommentWorkerService {
@@ -18,6 +23,7 @@ export class CommentWorkerService {
     private readonly prisma: PrismaService,
     private readonly facebook: FacebookService,
     private readonly audit: AuditService,
+    private readonly automation: CommentAutomationService,
     private readonly logger: AppLogger,
   ) {}
 
@@ -27,8 +33,42 @@ export class CommentWorkerService {
     this.running = true;
     try {
       await this.processPendingActions();
+      await this.recoverStaleComments();
     } finally {
       this.running = false;
+    }
+  }
+
+  /**
+   * Auto-recovery: comentarios visibles que quedaron sin analizar (webhook perdido,
+   * IA caída al momento del add, sync manual omitido) se reinyectan en el pipeline
+   * de clasificación + reglas. `processNewComment` es idempotente, así que un
+   * comentario ya atendido no vuelve a generar acciones.
+   */
+  private async recoverStaleComments(): Promise<void> {
+    try {
+      const cutoff = new Date(Date.now() - RECOVERY_AGE_MS);
+      const stale = await this.prisma.comment.findMany({
+        where: {
+          isFromPage: false,
+          status: CommentStatus.VISIBLE,
+          analyzedAt: null,
+          createdAt: { lte: cutoff },
+        },
+        select: { id: true },
+        orderBy: { createdAt: 'asc' },
+        take: RECOVERY_BATCH,
+      });
+      for (const comment of stale) {
+        void this.automation.processNewComment(comment.id).catch(err => {
+          this.logger.warn(`Auto-recovery de comentario ${comment.id} fallido: ${(err as Error).message}`, 'CommentWorker');
+        });
+      }
+      if (stale.length > 0) {
+        this.logger.debug(`Auto-recovery: ${stale.length} comentario(s) sin analizar reinyectados`, 'CommentWorker');
+      }
+    } catch (err) {
+      this.logger.warn(`Auto-recovery de comentarios falló: ${(err as Error).message}`, 'CommentWorker');
     }
   }
 

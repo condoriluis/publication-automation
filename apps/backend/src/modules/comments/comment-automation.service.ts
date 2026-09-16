@@ -31,11 +31,12 @@ export class CommentAutomationService {
   // ---------------------------------------------------------------------------
 
   /**
-   * Procesa un comentario recién creado: clasifica con IA (si aplica),
-   * evalúa reglas y ejecuta la primera coincidente.
+   * Procesa un comentario: clasifica con IA (si aplica), evalúa reglas y
+   * ejecuta la primera coincidente.
    * Ejecución asíncrona — puede fallar sin afectar al webhook.
+   * Idempotente: si el comentario ya tiene una acción registrada, no repite.
    */
-  async processNewComment(commentId: string): Promise<void> {
+  async processNewComment(commentId: string, opts: { reanalyze?: boolean } = {}): Promise<void> {
     const comment = await this.prisma.comment.findUnique({
       where: { id: commentId },
       include: {
@@ -44,11 +45,16 @@ export class CommentAutomationService {
     });
     if (!comment || comment.isFromPage || comment.status !== CommentStatus.VISIBLE) return;
 
+    // Idempotencia: un comentario con alguna acción ya fue atendido (add+edited,
+    // re-entregas del webhook o reanálisis) y no debe generar acciones duplicadas.
+    const priorAction = await this.prisma.commentAction.findFirst({ where: { commentId } });
+    if (priorAction) return;
+
     const settings = await this.loadSettings(comment.pageId);
     if (settings.aiEnabled === false) return;
 
-    // --- 1. Clasificar con IA si aún no está analizado ---
-    if (!comment.analyzedAt && this.ai.isEnabled) {
+    // --- 1. Clasificar con IA si aún no está analizado (o se pide reanálisis) ---
+    if ((!comment.analyzedAt || opts.reanalyze === true) && this.ai.isEnabled) {
       try {
         await this.ai.analyzeComments([commentId]);
       } catch (err) {

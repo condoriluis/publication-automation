@@ -9,6 +9,7 @@ import {
   FACEBOOK_ME_FIELDS,
   FACEBOOK_OAUTH_DIALOG_BASE,
   FACEBOOK_PAGE_FIELDS,
+  FACEBOOK_PAGE_SUBSCRIBE_FIELDS,
   OAUTH_STATE_TTL_MS,
 } from './facebook.config';
 
@@ -460,8 +461,39 @@ export class FacebookService {
           ...(pageTokenEncrypted ? { accessTokenEncrypted: pageTokenEncrypted } : {}),
         },
       });
+      // Activar webhooks de la página hacia la app (best effort: un fallo no
+      // rompe la sincronización; requiere el scope pages_manage_metadata).
+      if (meta.access_token) await this.subscribeMetaPage(meta.id, meta.access_token);
     }
     return metaPages.length;
+  }
+
+  /** GET /{page_id}/subscribed_apps real — suscribir la página a feed+comments. */
+  async subscribePageToApp(pageId: string): Promise<boolean> {
+    const { page, token } = await this.loadPage(pageId);
+    return this.subscribeMetaPage(page.facebookPageId, token);
+  }
+
+  private async subscribeMetaPage(facebookPageId: string, token: string): Promise<boolean> {
+    try {
+      const res = await this.request<{ success?: boolean }>('POST', `/${facebookPageId}/subscribed_apps`, {
+        params: { subscribed_fields: FACEBOOK_PAGE_SUBSCRIBE_FIELDS, access_token: token },
+      });
+      if (res.success === true) {
+        this.logger.debug(`Página ${facebookPageId} suscrita a webhooks (${FACEBOOK_PAGE_SUBSCRIBE_FIELDS})`);
+      }
+      return res.success === true;
+    } catch (err) {
+      const isPermission =
+        err instanceof FacebookGraphError &&
+        ((err as { status?: number }).status === 403 || (err as { status?: number }).status === 400);
+      this.logger.warn(
+        `No se pudo suscribir la página ${facebookPageId} a webhooks${isPermission ? ' (permisos insuficientes)' : ''}: ${
+          (err as Error).message
+        }`,
+      );
+      return false;
+    }
   }
 
   private pictureUrl(picture?: MetaPictureField): string | undefined {

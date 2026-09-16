@@ -11,6 +11,8 @@ export const FACEBOOK_PAGE_FIELDS =
   'id,name,category,access_token,fan_count,picture{url},link,is_published';
 /** Campos del perfil del usuario de Facebook en /me. */
 export const FACEBOOK_ME_FIELDS = 'id,name,email,first_name,last_name';
+/** Campos que suscribimos vía /{page_id}/subscribed_apps para el webhook de comentarios. */
+export const FACEBOOK_PAGE_SUBSCRIBE_FIELDS = 'feed,comments';
 
 /** TTL del estado OAuth emitido en /facebook/oauth/url. */
 export const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;

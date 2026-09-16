@@ -16,6 +16,9 @@ import { AppLogger } from './common/logger/app-logger.service';
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bufferLogs: true,
+    // rawBody permite verificar la firma HMAC del webhook de Meta sobre los
+    // bytes EXACTOS recibidos (x-hub-signature-256), no sobre una re-serialización.
+    rawBody: true,
   });
 
   const config = app.get(ConfigService);
