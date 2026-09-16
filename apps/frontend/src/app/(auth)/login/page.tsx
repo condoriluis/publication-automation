@@ -4,7 +4,6 @@ import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { ArrowRight, Eye, EyeOff, Loader2 } from 'lucide-react';
-import { useGoogleReCaptcha } from 'react-google-recaptcha-v3';
 
 import { useAuthAdmin } from '@/contexts/auth-context';
 import { fetchSetupStatus, getAccessToken } from '@/lib/api';
@@ -16,26 +15,71 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { MetaLogo } from '@/components/meta-logo';
 
 const REMEMBER_KEY = 'pa.rememberedEmail';
+const RECAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY ?? '';
+
+/* Tipos globales para el widget reCAPTCHA v2 (render explícito). */
+declare global {
+  interface Window {
+    paRecaptchaLoaded?: () => void;
+    grecaptcha?: {
+      render(el: HTMLElement, options: Record<string, unknown>): number;
+      getResponse(widgetId?: number): string | null;
+      reset(widgetId?: number): void;
+    };
+  }
+}
 
 export default function LoginPage() {
   const router = useRouter();
   const { login } = useAuthAdmin();
-  const { executeRecaptcha } = useGoogleReCaptcha();
   const [loading, setLoading] = React.useState(false);
   const [showPassword, setShowPassword] = React.useState(false);
   const [rememberMe, setRememberMe] = React.useState(false);
   const [form, setForm] = React.useState({ email: '', password: '' });
 
-  // Cargar email guardado al montar
+  /* --- reCAPTCHA v2 checkbox --- */
+  const captureRef = React.useRef<HTMLDivElement>(null);
+  const widgetIdRef = React.useRef<number | undefined>(undefined);
+  const tokenRef = React.useRef<string | null>(null);
+
   React.useEffect(() => {
-    const saved = localStorage.getItem(REMEMBER_KEY);
-    if (saved) {
-      setForm((f) => ({ ...f, email: saved }));
-      setRememberMe(true);
+    if (!RECAPTCHA_SITE_KEY) return;
+
+    const renderWidget = () => {
+      if (!captureRef.current || !window.grecaptcha?.render) return;
+      if (captureRef.current.childElementCount > 0) return;
+      const id = window.grecaptcha.render(captureRef.current, {
+        sitekey: RECAPTCHA_SITE_KEY,
+        theme: 'dark',
+        size: 'normal',
+        callback: () => {
+          tokenRef.current = window.grecaptcha?.getResponse(id) ?? null;
+        },
+      });
+      if (id !== undefined) widgetIdRef.current = id;
+    };
+
+    window.paRecaptchaLoaded = renderWidget;
+
+    let script = document.getElementById('pa-recaptcha') as HTMLScriptElement | null;
+    if (!script) {
+      script = document.createElement('script');
+      script.id = 'pa-recaptcha';
+      script.src = 'https://www.google.com/recaptcha/api.js?render=explicit&onload=paRecaptchaLoaded';
+      script.async = true;
+      script.defer = true;
+      document.body.appendChild(script);
+    } else if (window.grecaptcha?.render) {
+      renderWidget();
     }
   }, []);
 
-  // Si todavía no existe ningún usuario, lleva al registro del primer administrador
+  const resetCaptcha = React.useCallback(() => {
+    window.grecaptcha?.reset(widgetIdRef.current ?? undefined);
+    tokenRef.current = null;
+  }, []);
+
+  /* Redirige a /register si la BD está vacía */
   React.useEffect(() => {
     let cancelled = false;
     void fetchSetupStatus().then((requiresSetup) => {
@@ -48,15 +92,32 @@ export default function LoginPage() {
     };
   }, [router]);
 
+  /* Email recordado al montar */
+  React.useEffect(() => {
+    const saved = localStorage.getItem(REMEMBER_KEY);
+    if (saved) {
+      setForm((f) => ({ ...f, email: saved }));
+      setRememberMe(true);
+    }
+  }, []);
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    try {
-      let recaptchaToken: string | undefined;
-      if (executeRecaptcha) {
-        recaptchaToken = await executeRecaptcha('login');
-      }
 
+    /* Validar token si el widget está activo */
+    let recaptchaToken: string | undefined;
+    if (RECAPTCHA_SITE_KEY) {
+      const token = tokenRef.current;
+      if (!token) {
+        toast.error("Marca la casilla 'No soy un robot' para continuar.");
+        setLoading(false);
+        return;
+      }
+      recaptchaToken = token;
+    }
+
+    try {
       if (rememberMe) {
         localStorage.setItem(REMEMBER_KEY, form.email);
       } else {
@@ -67,6 +128,7 @@ export default function LoginPage() {
       toast.success('Bienvenido de vuelta');
       router.push('/dashboard');
     } catch (err) {
+      if (RECAPTCHA_SITE_KEY) resetCaptcha();
       toast.error(err instanceof Error ? err.message : 'No se pudo iniciar sesión');
       setLoading(false);
     }
@@ -140,6 +202,10 @@ export default function LoginPage() {
                   Recordar ingreso
                 </Label>
               </div>
+
+              {RECAPTCHA_SITE_KEY ? (
+                <div className="flex justify-center min-h-[78px] rounded-lg" ref={captureRef} />
+              ) : null}
             </CardContent>
 
             <CardFooter className="pt-2">

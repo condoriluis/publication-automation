@@ -28,8 +28,6 @@ export interface AuthResult {
 }
 
 const RECAPTCHA_VERIFY_URL = 'https://www.google.com/recaptcha/api/siteverify';
-/** Puntuación mínima de reCAPTCHA v3. Por debajo se considera bot (0 = bot, 1 = humano). */
-const RECAPTCHA_MIN_SCORE = 0.5;
 
 @Injectable()
 export class AuthService {
@@ -68,31 +66,41 @@ export class AuthService {
   }
 
   /**
-   * Valida el token de reCAPTCHA v3 contra la API de Google.
-   * Solo se aplica en producción o si el secret está configurado.
-   * Lanza BadRequestException si el token es inválido o el score es bajo.
+   * Verifica el token de reCAPTCHA v2 (checkbox "No soy un robot") contra Google.
+   * Fail-open: si no hay secret configurado la verificación se omite.
+   * Si el secret existe, el token es obligatorio y debe pasar (binario, sin score).
    */
-  private async verifyRecaptcha(token: string | undefined): Promise<void> {
+  private async verifyRecaptcha(token: string | undefined, ctx: AuthContext): Promise<void> {
     const secret = this.recaptchaSecret;
-    if (!secret || this.config.get('NODE_ENV') !== 'production') return;
+    if (!secret) return;
 
     if (!token) {
-      throw new BadRequestException('Se requiere validación de reCAPTCHA');
+      throw new ForbiddenException('Se requiere la verificación reCAPTCHA');
     }
 
     const params = new URLSearchParams({ secret, response: token });
-    const res = await fetch(`${RECAPTCHA_VERIFY_URL}?${params.toString()}`, { method: 'POST' });
+    if (ctx.ip) params.set('remoteip', ctx.ip);
 
-    if (!res.ok) {
+    let res: Response;
+    try {
+      res = await fetch(`${RECAPTCHA_VERIFY_URL}?${params.toString()}`, {
+        method: 'POST',
+        signal: AbortSignal.timeout(6_000),
+      });
+    } catch {
       this.logger.warn('reCAPTCHA verify request failed', 'Auth');
-      throw new BadRequestException('Error al verificar reCAPTCHA');
+      throw new ForbiddenException('No se pudo verificar el antirrobot. Inténtalo de nuevo.');
     }
 
-    const data = (await res.json()) as { success: boolean; score: number; 'error-codes'?: string[] };
+    if (!res.ok) {
+      this.logger.warn(`reCAPTCHA verify HTTP ${res.status}`, 'Auth');
+      throw new ForbiddenException('No se pudo verificar el antirrobot. Inténtalo de nuevo.');
+    }
 
-    if (!data.success || data.score < RECAPTCHA_MIN_SCORE) {
-      this.logger.warn(`reCAPTCHA failed: success=${data.success} score=${data.score}`, 'Auth');
-      throw new BadRequestException('Verificación de seguridad fallida. Inténtalo de nuevo.');
+    const data = (await res.json()) as { success?: boolean; 'error-codes'?: string[] };
+    if (!data.success) {
+      this.logger.warn(`reCAPTCHA falló: ${JSON.stringify(data['error-codes'])}`, 'Auth');
+      throw new ForbiddenException('Verificación antirrobot fallida. Inténtalo de nuevo.');
     }
   }
 
@@ -150,7 +158,7 @@ export class AuthService {
       throw new BadRequestException('Indica email o username');
     }
 
-    await this.verifyRecaptcha(dto.recaptchaToken);
+    await this.verifyRecaptcha(dto.recaptchaToken, ctx);
 
     const user = await this.users.findByLogin(dto.email, dto.username);
     if (!user) {
