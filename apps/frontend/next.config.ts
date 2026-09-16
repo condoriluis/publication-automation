@@ -16,17 +16,18 @@ const apiSource = /^https?:\/\//.test(apiUrl) ? new URL(apiUrl).origin : 'self';
 
 /**
  * CSP básico de referencia.
- * Es intencionadamente permisivo con 'unsafe-inline'/'unsafe-eval' para no
- * romper el modo desarrollo de Next; afírmalo antes de producción.
+ * Se permiten los dominios de Google necesarios para reCAPTCHA v3
+ * (www.google.com y www.gstatic.com). Mientras exista 'unsafe-inline'/'unsafe-eval'
+ * será una CSP de partida; se puede afinar después perdiendo esos comodines.
  */
 const csp = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-  "style-src 'self' 'unsafe-inline'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.google.com https://www.gstatic.com",
+  "style-src 'self' 'unsafe-inline' https://www.gstatic.com",
   "img-src 'self' blob: data: https:",
   "font-src 'self' data:",
   `connect-src 'self' ${apiSource} https:`,
-  "frame-src 'self' https://www.facebook.com",
+  "frame-src 'self' https://www.facebook.com https://www.google.com https://www.gstatic.com",
 ].join('; ');
 
 const nextConfig: NextConfig = {
