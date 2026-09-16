@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, HttpStatus, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Request } from 'express';
 import { AuthUser, CurrentUser, Public } from '../../common/decorators/auth.decorators';
@@ -13,6 +13,17 @@ import { RegisterDto } from './dto/register.dto';
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
+  @Public()
+  @UseGuards(JwtAuthGuard)
+  @Get('setup-status')
+  setupStatus() {
+    return this.auth.setupStatus();
+  }
+
+  /**
+   * Bootstrap del primer administrador: solo responde mientras la base esté vacía.
+   * En cuanto existe un usuario devuelve 403 y la página /registro deja de existir (404).
+   */
   @Public()
   @UseGuards(JwtAuthGuard)
   @Post('register')

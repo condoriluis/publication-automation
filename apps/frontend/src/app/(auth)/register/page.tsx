@@ -1,48 +1,45 @@
 'use client';
 
 import * as React from 'react';
-import { useRouter } from 'next/navigation';
+import { notFound, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { ArrowRight, Eye, EyeOff, Loader2 } from 'lucide-react';
-import { useGoogleReCaptcha } from 'react-google-recaptcha-v3';
+import { ArrowRight, Eye, EyeOff, Loader2, ShieldCheck } from 'lucide-react';
 
 import { useAuthAdmin } from '@/contexts/auth-context';
-import { fetchSetupStatus, getAccessToken } from '@/lib/api';
+import { ApiError, fetchSetupStatus, getAccessToken } from '@/lib/api';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
 import { MetaLogo } from '@/components/meta-logo';
 
-const REMEMBER_KEY = 'pa.rememberedEmail';
+const EMPTY = { email: '', username: '', password: '', displayName: '' };
 
-export default function LoginPage() {
+export default function RegisterPage() {
   const router = useRouter();
-  const { login } = useAuthAdmin();
-  const { executeRecaptcha } = useGoogleReCaptcha();
+  const { register } = useAuthAdmin();
+  const [checking, setChecking] = React.useState(true);
   const [loading, setLoading] = React.useState(false);
   const [showPassword, setShowPassword] = React.useState(false);
-  const [rememberMe, setRememberMe] = React.useState(false);
-  const [form, setForm] = React.useState({ email: '', password: '' });
+  const [form, setForm] = React.useState(EMPTY);
 
-  // Cargar email guardado al montar
-  React.useEffect(() => {
-    const saved = localStorage.getItem(REMEMBER_KEY);
-    if (saved) {
-      setForm((f) => ({ ...f, email: saved }));
-      setRememberMe(true);
-    }
-  }, []);
-
-  // Si todavía no existe ningún usuario, lleva al registro del primer administrador
   React.useEffect(() => {
     let cancelled = false;
-    void fetchSetupStatus().then((requiresSetup) => {
-      if (cancelled || !requiresSetup) return;
-      if (getAccessToken()) return;
-      router.replace('/register');
-    });
+    const boot = async () => {
+      if (getAccessToken()) {
+        router.replace('/dashboard');
+        return;
+      }
+      const requiresSetup = await fetchSetupStatus();
+      if (cancelled) return;
+      if (!requiresSetup) {
+        // El primer administrador ya existe: esta ruta deja de existir.
+        notFound();
+        return;
+      }
+      setChecking(false);
+    };
+    void boot();
     return () => {
       cancelled = true;
     };
@@ -52,24 +49,32 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      let recaptchaToken: string | undefined;
-      if (executeRecaptcha) {
-        recaptchaToken = await executeRecaptcha('login');
-      }
-
-      if (rememberMe) {
-        localStorage.setItem(REMEMBER_KEY, form.email);
-      } else {
-        localStorage.removeItem(REMEMBER_KEY);
-      }
-
-      await login(form.email, form.password, recaptchaToken);
-      toast.success('Bienvenido de vuelta');
+      await register({
+        email: form.email.trim().toLowerCase(),
+        username: form.username.trim(),
+        password: form.password,
+        displayName: form.displayName.trim() || undefined,
+      });
+      toast.success('Administrador configurado correctamente');
       router.push('/dashboard');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudo iniciar sesión');
+      const status = err instanceof ApiError ? err.status : undefined;
+      if (status === 403) {
+        toast.error('El registro está cerrado: el sistema ya tiene un administrador.');
+        router.replace('/login');
+        return;
+      }
+      toast.error(err instanceof Error ? err.message : 'No se pudo completar el registro');
       setLoading(false);
     }
+  }
+
+  if (checking) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background via-background to-primary/10 p-4">
+        <Loader2 className="size-6 animate-spin text-muted-foreground" />
+      </div>
+    );
   }
 
   return (
@@ -81,15 +86,20 @@ export default function LoginPage() {
           </div>
           <h1 className="text-2xl font-bold tracking-tight">Publication Automation</h1>
           <p className="text-sm text-muted-foreground">
-            Gestiona y automatiza tus publicaciones en Facebook
+            Bienvenido. Todo listo para configurar tu primer administrador.
           </p>
         </div>
 
         <Card className="animate-scale-in">
           <form onSubmit={onSubmit}>
             <CardHeader>
-              <CardTitle>Iniciar sesión</CardTitle>
-              <CardDescription>Ingresa tus credenciales para continuar</CardDescription>
+              <CardTitle className="flex items-center gap-2">
+                <ShieldCheck className="size-5 text-[#1877F2]" /> Configuración inicial
+              </CardTitle>
+              <CardDescription>
+                Este es el paso único de instalación: crea la cuenta administradora del sistema. Una vez creada,
+                esta página desaparece.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
@@ -100,9 +110,36 @@ export default function LoginPage() {
                   autoComplete="email"
                   autoFocus
                   required
-                  placeholder="admin@example.com"
+                  placeholder="admin@tuempresa.com"
                   value={form.email}
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="username">Nombre de usuario</Label>
+                <Input
+                  id="username"
+                  type="text"
+                  autoComplete="username"
+                  required
+                  placeholder="admin"
+                  pattern="[a-zA-Z0-9_.-]{3,32}"
+                  title="De 3 a 32 caracteres (letras, números, _ . -)"
+                  value={form.username}
+                  onChange={(e) => setForm({ ...form, username: e.target.value })}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="displayName">Nombre para mostrar (opcional)</Label>
+                <Input
+                  id="displayName"
+                  type="text"
+                  maxLength={80}
+                  placeholder="Administrador"
+                  value={form.displayName}
+                  onChange={(e) => setForm({ ...form, displayName: e.target.value })}
                 />
               </div>
 
@@ -112,9 +149,11 @@ export default function LoginPage() {
                   <Input
                     id="password"
                     type={showPassword ? 'text' : 'password'}
-                    autoComplete="current-password"
+                    autoComplete="new-password"
                     required
-                    placeholder="••••••••"
+                    minLength={8}
+                    maxLength={72}
+                    placeholder="Mínimo 8 caracteres"
                     className="pr-10"
                     value={form.password}
                     onChange={(e) => setForm({ ...form, password: e.target.value })}
@@ -129,23 +168,12 @@ export default function LoginPage() {
                   </button>
                 </div>
               </div>
-
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="remember"
-                  checked={rememberMe}
-                  onCheckedChange={(checked) => setRememberMe(Boolean(checked))}
-                />
-                <Label htmlFor="remember" className="cursor-pointer text-sm font-normal text-muted-foreground">
-                  Recordar ingreso
-                </Label>
-              </div>
             </CardContent>
 
             <CardFooter className="pt-2">
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? <Loader2 className="animate-spin" /> : <ArrowRight />}
-                {loading ? 'Entrando…' : 'Entrar'}
+                {loading ? 'Configurando…' : 'Crear administrador'}
               </Button>
             </CardFooter>
           </form>

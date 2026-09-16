@@ -1,7 +1,7 @@
-import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService, JwtSignOptions } from '@nestjs/jwt';
-import { LogCategory, Role } from '@prisma/client';
+import { LogCategory, Prisma, Role } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { CryptoService } from '../../common/crypto/crypto.service';
 import { AppLogger } from '../../common/logger/app-logger.service';
@@ -96,8 +96,50 @@ export class AuthService {
     }
   }
 
+  /**
+   * ¿El sistema requiere configuración inicial? `true` solo si no existe ningún usuario.
+   * El frontend lo usa para mostrar la página de creación del primer administrador.
+   */
+  async setupStatus(): Promise<{ requiresSetup: boolean }> {
+    const count = await this.prisma.user.count();
+    return { requiresSetup: count === 0 };
+  }
+
+  /**
+   * Registro del PRIMER usuario (bootstrap del administrador).
+   * Solo es válido mientras la base está vacía; en cuanto existe un usuario la ruta
+   * queda cerrada (403). El chequeo corre dentro de una transacción Serializable para
+   * evitar la carrera de dos registros simultáneos (mismo patrón que ai-engineering).
+   */
   async register(dto: RegisterDto, ctx: AuthContext): Promise<AuthResult> {
-    const user = await this.users.create(dto, [Role.OPERATOR]);
+    let user: UserWithRoles;
+    try {
+      user = await this.prisma.$transaction(
+        async (tx) => {
+          const count = await tx.user.count();
+          if (count > 0) {
+            throw new ForbiddenException('El registro está cerrado. El sistema ya tiene un administrador configurado.');
+          }
+          return tx.user.create({
+            data: {
+              email: dto.email,
+              username: dto.username,
+              passwordHash: await bcrypt.hash(dto.password, this.rounds),
+              displayName: dto.displayName ?? dto.username,
+              isActive: true,
+              roles: { create: [{ role: Role.ADMIN }] },
+            },
+            include: { roles: true },
+          });
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException('Ya existe una cuenta con ese email o username');
+      }
+      throw error;
+    }
     const session = await this.createSession(user);
     await this.audit('auth.register', user.id, ctx, { email: user.email });
     return { user: this.toPublic(user), tokens: session.tokens };

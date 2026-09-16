@@ -50,6 +50,22 @@ export function clearTokens(): void {
 /** Alias compatible con el contexto de sesión. */
 export const clearStoredSession = clearTokens;
 
+/** ¿El sistema requiere el registro del primer administrador? (base de usuarios vacía) */
+export async function fetchSetupStatus(): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_URL}/auth/setup-status`, {
+      method: 'GET',
+      cache: 'no-store',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) return false;
+    const data = (await res.json()) as { requiresSetup?: boolean };
+    return data.requiresSetup === true;
+  } catch {
+    return false;
+  }
+}
+
 export class ApiError extends Error {
   status: number;
   code?: string;
