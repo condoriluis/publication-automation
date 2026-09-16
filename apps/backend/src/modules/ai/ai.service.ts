@@ -298,10 +298,11 @@ this.logger.log(`Análisis automático de comentarios: ${analyzed.length}/${ids.
   // ---------------------------------------------------------------------------
 
   private async chat(system: string, user: string, opts?: { maxTokens?: number }): Promise<string> {
-    const { provider, model, apiKey, baseUrl } = await this.aiConfig.getActive();
+    const { provider, model, apiKey, baseUrl, maxTokens: configMaxTokens } = await this.aiConfig.getActive();
     if (!apiKey) throw new AiUnavailableError('Servicio de IA no disponible: falta API key configurada');
 
-    const maxTokens = opts?.maxTokens ?? AI_MAX_TOKENS;
+    const maxTokens =
+      opts?.maxTokens ?? Math.max(AI_MAX_TOKENS, configMaxTokens || 0);
 
     let attempts = 0;
     while (attempts < 3) {

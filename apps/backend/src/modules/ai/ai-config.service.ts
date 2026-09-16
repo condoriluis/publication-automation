@@ -3,7 +3,7 @@ import { Injectable } from '@nestjs/common';
 import { AppConfigService } from '../../config/app-config.service';
 import { CryptoService } from '../../common/crypto/crypto.service';
 import { PrismaService } from '../../prisma/prisma.service';
-import { AI_DEFAULT_BASE_URLS, AiProviderName } from './ai.constants';
+import { AI_DEFAULT_BASE_URLS, AI_MAX_TOKENS, AiProviderName } from './ai.constants';
 
 export interface ActiveAiConfig {
   provider: string;
@@ -70,7 +70,7 @@ export class AIConfigService {
       apiKey: this.appConfig.aiApiKey ?? '',
       baseUrl: this.appConfig.aiBaseUrl ?? AI_DEFAULT_BASE_URLS[provider],
       temperature: 0.7,
-      maxTokens: 1024,
+      maxTokens: AI_MAX_TOKENS,
       systemPrompt: DEFAULT_SYSTEM_PROMPT,
     };
   }

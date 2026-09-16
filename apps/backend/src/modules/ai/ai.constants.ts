@@ -9,7 +9,7 @@ export const AI_DEFAULT_BASE_URLS: Record<AiProviderName, string> = {
   openrouter: 'https://openrouter.ai/api/v1',
 };
 
-export const AI_MAX_TOKENS = 1024;
+export const AI_MAX_TOKENS = 4096;
 export const AI_TEMPERATURE = 0.7;
 export const AI_TIMEOUT_MS = 60_000;
 
