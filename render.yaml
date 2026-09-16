@@ -12,7 +12,7 @@ services:
     plan: free
     rootDir: .
     healthCheckPath: /api/health
-    buildCommand: npm ci && npm run build:backend
+    buildCommand: npm ci --include=dev && npm run build:backend
     startCommand: npm run start:backend:prod
     envVars:
       - key: NODE_ENV
@@ -50,7 +50,7 @@ services:
       - key: FACEBOOK_API_VERSION
         value: v26.0
       - key: META_OAUTH_REDIRECT_URI
-        sync: false # https://TU-API.onrender.com/oauth/callback
+        sync: false # https://TU-FRONTEND.vercel.app/oauth/callback (el callback vive en la web)
       - key: META_WEBHOOK_VERIFY_TOKEN
         sync: false
 
