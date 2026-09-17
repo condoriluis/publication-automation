@@ -303,6 +303,8 @@ model Post {
   metaObjectId  String?
   metaPermalinkUrl String?
   status        PostStatus @default(DRAFT)
+  // Publicación automática de posts sueltos: intentos en curso (fallos transitorios).
+  publishAttempts Int      @default(0)
   // IA
   aiGenerated   Boolean  @default(false)
   aiProvider    String?
