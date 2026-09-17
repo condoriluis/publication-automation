@@ -3,11 +3,14 @@
 import * as React from 'react';
 import {
   type ColumnDef,
+  type ExpandedState,
   flexRender,
   getCoreRowModel,
+  getExpandedRowModel,
   getPaginationRowModel,
   getFilteredRowModel,
   getSortedRowModel,
+  type Row,
   type SortingState,
   useReactTable,
 } from '@tanstack/react-table';
@@ -23,29 +26,65 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { LoadingRows } from '@/components/pagination';
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
   loading?: boolean;
+  /** Devuelve true para las filas que pueden desplegar contenido extra. */
+  getRowCanExpand?: (row: Row<TData>) => boolean;
+  /** Contenido extra que se muestra debajo de la fila al expandirla. */
+  renderSubComponent?: (props: { row: Row<TData> }) => React.ReactNode;
 }
 
-export function DataTable<TData, TValue>({ columns, data, loading }: DataTableProps<TData, TValue>) {
+const expanderColumn: ColumnDef<unknown, unknown> = {
+  id: 'expander',
+  enableSorting: false,
+  header: () => null,
+  cell: ({ row }) =>
+    row.getCanExpand() ? (
+      <button
+        type="button"
+        onClick={() => row.toggleExpanded()}
+        aria-label={row.getIsExpanded() ? 'Contraer' : 'Expandir'}
+        className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+      >
+        {row.getIsExpanded() ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+      </button>
+    ) : null,
+};
+
+export function DataTable<TData, TValue>({
+  columns,
+  data,
+  loading,
+  getRowCanExpand,
+  renderSubComponent,
+}: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = React.useState('');
+  const [expanded, setExpanded] = React.useState<ExpandedState>({});
+
+  const mergedColumns = React.useMemo<ColumnDef<TData, TValue>[]>(
+    () => (renderSubComponent ? ([expanderColumn, ...columns] as ColumnDef<TData, TValue>[]) : columns),
+    [columns, renderSubComponent],
+  );
 
   const table = useReactTable({
     data,
-    columns,
-    state: { sorting, globalFilter },
+    columns: mergedColumns,
+    state: { sorting, globalFilter, expanded },
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
+    onExpandedChange: setExpanded,
+    getRowCanExpand,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
+    getExpandedRowModel: getExpandedRowModel(),
     initialState: { pagination: { pageSize: 10 } },
   });
 
@@ -125,23 +164,32 @@ export function DataTable<TData, TValue>({ columns, data, loading }: DataTablePr
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={columns.length} className="h-24 text-center">
+                <TableCell colSpan={mergedColumns.length} className="h-24 text-center">
                   <LoadingRows rows={3} />
                 </TableCell>
               </TableRow>
             ) : table.getRowModel().rows.length ? (
               table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id}>
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </TableCell>
-                  ))}
-                </TableRow>
+                <React.Fragment key={row.id}>
+                  <TableRow>
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell key={cell.id}>
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                  {row.getIsExpanded() && renderSubComponent ? (
+                    <TableRow>
+                      <TableCell colSpan={row.getVisibleCells().length} className="bg-muted/20 p-0">
+                        {renderSubComponent({ row })}
+                      </TableCell>
+                    </TableRow>
+                  ) : null}
+                </React.Fragment>
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={columns.length} className="h-24 text-center text-sm text-[var(--muted-foreground)]">
+                <TableCell colSpan={mergedColumns.length} className="h-24 text-center text-sm text-[var(--muted-foreground)]">
                   No hay registros disponibles
                 </TableCell>
               </TableRow>
