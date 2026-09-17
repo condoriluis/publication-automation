@@ -106,14 +106,19 @@ function LinkCard({ url }: { url: string }) {
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className="mt-3 block overflow-hidden rounded-lg border border-black/5 bg-zinc-100 dark:bg-zinc-800"
+      className="mx-4 mt-3 block overflow-hidden rounded-lg border border-black/5 bg-zinc-100 dark:bg-zinc-800"
     >
-      <div className="flex aspect-[16/9] w-full items-center justify-center bg-zinc-900">
-        <span className="max-w-[80%] truncate text-sm font-semibold text-white/80">{hostname}</span>
+      <div className="flex h-[110px]">
+        <div className="flex w-28 shrink-0 items-center justify-center self-stretch bg-zinc-900">
+          <span className="line-clamp-2 px-2 text-center text-xs font-semibold text-white/80">{hostname}</span>
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col justify-center gap-1 px-3 py-2">
+          <p className="truncate text-sm font-semibold text-foreground">{hostname}</p>
+          <p className="line-clamp-2 text-[13px] leading-snug text-muted-foreground">{url}</p>
+        </div>
       </div>
-      <div className="space-y-1 px-3 py-2">
-        <p className="text-[15px] font-semibold leading-snug text-foreground">{hostname}</p>
-        <p className="truncate text-[13px] text-muted-foreground">{url}</p>
+      <div className="border-t border-black/5 px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        Enlace
       </div>
     </a>
   );
@@ -181,7 +186,7 @@ export function FacebookPostPreview({
         )}
       </p>
 
-      {linkUrl ? <LinkCard url={linkUrl} /> : null}
+      {linkUrl && !hasMedia ? <LinkCard url={linkUrl} /> : null}
 
       {/* Media */}
       {videoUrl ? (
