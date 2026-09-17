@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { toast } from 'sonner';
 import { ArrowLeft, Play, X, Trash2, ExternalLink, RefreshCw, Loader2,
-  MessageSquare, ThumbsUp, Share2, Eye, TrendingUp, Bot, CheckCircle2, Clock,
+  MessageSquare, ThumbsUp, Share2, Eye, TrendingUp, Bot, CheckCircle2, Clock, ChevronRight,
 } from 'lucide-react';
 
 import { api } from '@/lib/api';
@@ -160,14 +161,20 @@ export default function PostDetailPage() {
               <InfoRow label="Última actualización" value={formatDate(post.statusChangedAt)} />
               <div className="flex items-center justify-between pt-1 border-t">
                 <span className="text-foreground/60">Comentarios</span>
-                <span className="flex items-center gap-1.5 font-medium">
-                  {commentCount > 0 ? (
-                    <CheckCircle2 className="size-3.5 text-emerald-500" />
-                  ) : (
-                    <Clock className="size-3.5 text-foreground/30" />
-                  )}
-                  {commentCount}
-                </span>
+                {commentCount > 0 ? (
+                  <Link
+                    href={`/comments?postId=${post.id}`}
+                    className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 font-medium text-[#1877F2] transition-colors hover:bg-black/5 dark:hover:bg-white/10"
+                  >
+                    <MessageSquare className="size-3.5" />
+                    {commentCount}
+                    <ChevronRight className="size-3.5" />
+                  </Link>
+                ) : (
+                  <span className="flex items-center gap-1.5 font-medium">
+                    <Clock className="size-3.5 text-foreground/30" /> 0
+                  </span>
+                )}
               </div>
             </CardContent>
           </Card>

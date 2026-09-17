@@ -1,8 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { toast } from 'sonner';
-import { Reply, Bot, EyeOff, Eye, Trash2, MessageSquareOff, Loader2, Sparkles } from 'lucide-react';
+import { Reply, Bot, EyeOff, Eye, Trash2, MessageSquareOff, Loader2, Sparkles, X } from 'lucide-react';
 
 import { api } from '@/lib/api';
 import type { Paginated, CommentDetail, RiskLevel, CommentStatus, CommentClassification } from '@/lib/types';
@@ -10,7 +12,6 @@ import { PageHeader } from '@/components/page-header';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { StatusBadge } from '@/components/status-badge';
 import { EmptyState } from '@/components/empty-state';
 import { LoadingRows, Pagination } from '@/components/pagination';
 import { formatRelative } from '@/lib/utils';
@@ -27,7 +28,23 @@ const CLASSIFICATION_LABELS: Record<CommentClassification, { label: string; clas
   OPORTUNIDAD: { label: 'Oportunidad', className: '!bg-violet-500/10 !text-violet-600 dark:!text-violet-400' },
 };
 
+const STATUS_LABELS: Record<CommentStatus, { label: string; className: string }> = {
+  VISIBLE: { label: 'Visible', className: '!bg-emerald-500/10 !text-emerald-600 dark:!text-emerald-400' },
+  HIDDEN: { label: 'Oculto', className: '!bg-amber-500/10 !text-amber-600 dark:!text-amber-400' },
+  RESPONDED: { label: 'Respondido', className: '!bg-sky-500/10 !text-sky-600 dark:!text-sky-400' },
+  DELETED: { label: 'Eliminado', className: '!bg-destructive/10 !text-destructive' },
+};
+
+const RISK_LABELS: Record<RiskLevel, { label: string; className: string }> = {
+  NONE: { label: 'Sin riesgo', className: '!bg-emerald-500/10 !text-emerald-600 dark:!text-emerald-400' },
+  LOW: { label: 'Riesgo bajo', className: '!bg-amber-500/10 !text-amber-600 dark:!text-amber-400' },
+  MEDIUM: { label: 'Riesgo medio', className: '!bg-orange-500/10 !text-orange-600 dark:!text-orange-400' },
+  HIGH: { label: 'Riesgo alto', className: '!bg-destructive/10 !text-destructive' },
+};
+
 export default function CommentsPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [data, setData] = useState<Paginated<CommentDetail> | null>(null);
   const [page, setPage] = useState(1);
   const [risk, setRisk] = useState('');
@@ -35,6 +52,7 @@ export default function CommentsPage() {
   const [classification, setClassification] = useState('');
   const [onlyModeration, setOnlyModeration] = useState(false);
   const [onlyReview, setOnlyReview] = useState(false);
+  const [postId, setPostId] = useState<string | null>(searchParams.get('postId'));
   const [replyId, setReplyId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
@@ -42,8 +60,8 @@ export default function CommentsPage() {
   const [suggesting, setSuggesting] = useState<string | null>(null);
 
   const buildQuery = useCallback(
-    () => `/comments?page=${page}&limit=10${risk ? `&riskLevel=${risk}` : ''}${status ? `&status=${status}` : ''}${classification ? `&classification=${classification}` : ''}${onlyReview ? '&needsReview=true' : ''}${onlyModeration ? '&needsModeration=true' : ''}`,
-    [page, risk, status, classification, onlyModeration, onlyReview],
+    () => `/comments?page=${page}&limit=10${risk ? `&riskLevel=${risk}` : ''}${status ? `&status=${status}` : ''}${classification ? `&classification=${classification}` : ''}${onlyReview ? '&needsReview=true' : ''}${onlyModeration ? '&needsModeration=true' : ''}${postId ? `&postId=${postId}` : ''}`,
+    [page, risk, status, classification, onlyModeration, onlyReview, postId],
   );
 
   const load = useCallback(async () => {
@@ -123,6 +141,17 @@ export default function CommentsPage() {
         <Button size="sm" variant={onlyReview ? 'default' : 'outline'} onClick={() => { setOnlyReview(!onlyReview); setPage(1); }}>
           Solo revisión
         </Button>
+        {postId ? (
+          <Button
+            size="sm"
+            variant="secondary"
+            className="gap-1"
+            onClick={() => { setPostId(null); router.replace('/comments'); setPage(1); }}
+          >
+            Publicación {postId.slice(0, 8)}…
+            <X className="size-3" />
+          </Button>
+        ) : null}
       </div>
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
@@ -137,25 +166,27 @@ export default function CommentsPage() {
             {data.data.map((c) => (
               <li key={c.id} className="flex flex-col gap-2 p-4">
                 <div className="flex flex-wrap items-center gap-2">
-                  <div className="flex size-8 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                  <div className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/10 text-xs font-semibold text-primary">
                     {(c.fromName ?? '?').slice(0, 2).toUpperCase()}
                   </div>
                   <span className="text-sm font-medium">{c.fromName ?? 'Anónimo'}</span>
+                  <span className="text-xs text-foreground/50">·</span>
                   <span className="text-xs text-foreground/50">{formatRelative(c.createdAt)}</span>
-                  <span className="ml-2 cursor-pointer rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground hover:bg-muted/80 hover:text-foreground"
-                    title="Clic para copiar ID"
-                    onClick={() => {
-                      navigator.clipboard.writeText(c.id);
-                      toast.success('ID copiado al portapapeles');
-                    }}
-                  >
-                    {c.id}
-                  </span>
-                  <div className="ml-auto flex items-center gap-1.5">
+                  <div className="ml-auto flex flex-wrap items-center gap-1.5">
                     {c.classification ? (
-                      <span title={`Confianza: ${c.confidence ?? 'n/d'}%`} className={`rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium ${CLASSIFICATION_LABELS[c.classification].className}`}>
+                      <span title={`Confianza: ${c.confidence ?? 'n/d'}%`} className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${CLASSIFICATION_LABELS[c.classification].className}`}>
                         {CLASSIFICATION_LABELS[c.classification].label}
-                        {typeof c.confidence === 'number' && <span className="ml-1 font-mono text-[9px] text-foreground/40">{c.confidence}%</span>}
+                        {typeof c.confidence === 'number' && <span className="ml-1 font-mono text-[9px] opacity-60">{c.confidence}%</span>}
+                      </span>
+                    ) : null}
+                    {STATUS_LABELS[c.status] ? (
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_LABELS[c.status].className}`}>
+                        {STATUS_LABELS[c.status].label}
+                      </span>
+                    ) : null}
+                    {RISK_LABELS[c.riskLevel] ? (
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${RISK_LABELS[c.riskLevel].className}`}>
+                        {RISK_LABELS[c.riskLevel].label}
                       </span>
                     ) : null}
                     {c.needsReview && (
@@ -163,13 +194,15 @@ export default function CommentsPage() {
                         Revisar
                       </span>
                     )}
-                    <StatusBadge value={c.status} />
-                    <StatusBadge value={c.riskLevel} className="!bg-amber-500/10 !text-amber-600 dark:!text-amber-400" />
                   </div>
                 </div>
                 <p className="whitespace-pre-wrap text-sm leading-relaxed">{c.message || <span className="text-foreground/40">(sin texto)</span>}</p>
-                <p className="text-xs text-foreground/50">
-                  {c.page?.name} · {c.post?.content.slice(0, 60) ?? '—'}
+                <p className="flex flex-wrap items-center gap-1.5 text-xs text-foreground/50">
+                  <span className="font-medium text-foreground/70">{c.page?.name ?? 'Página'}</span>
+                  <span>·</span>
+                  <Link href={`/posts/${c.post?.id}`} className="min-w-0 truncate text-[#1877F2] hover:underline">
+                    {c.post?.content.slice(0, 60) ?? 'Ver publicación'}
+                  </Link>
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => { setReplyId(replyId === c.id ? null : c.id); setReplyText(''); }}>
