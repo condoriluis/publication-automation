@@ -18,6 +18,14 @@ import { FacebookIcon } from '@/components/facebook-icon';
 import { TutorialFacebookGuide } from '@/components/tutorial-facebook-guide';
 import { formatDate } from '@/lib/utils';
 
+/** Etiquetas legibles para el estado de una cuenta conectada. */
+const ACCOUNT_STATUS_LABELS: Record<SafeFacebookAccount['status'], string> = {
+  ACTIVE: 'Conectada',
+  EXPIRED: 'Expirada',
+  REVOKED: 'Revocada',
+  DISCONNECTED: 'Desconectada',
+};
+
 export default function PagesPage() {
   const [accounts, setAccounts] = useState<SafeFacebookAccount[] | null>(null);
   const [pages, setPages] = useState<PageListRow[] | null>(null);
@@ -160,12 +168,25 @@ export default function PagesPage() {
           <div className="grid gap-4 md:grid-cols-2">
             {accounts.map((a) => (
               <Card key={a.id}>
-                <CardHeader className="flex-row items-start justify-between space-y-0">
-                  <div className="min-w-0">
-                    <CardTitle className="truncate text-base">{a.facebookUserName ?? a.facebookUserId}</CardTitle>
-                    <p className="mt-0.5 text-xs text-foreground/50">{a.facebookUserId}</p>
+                <CardHeader className="flex-row items-center justify-between space-y-0">
+                  <div className="flex min-w-0 items-center gap-3">
+                    {a.pictureUrl ? (
+                      <img
+                        src={a.pictureUrl}
+                        alt={a.facebookUserName ?? a.facebookUserId}
+                        className="size-10 shrink-0 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-semibold text-foreground/50">
+                        {(a.facebookUserName ?? a.facebookUserId).slice(0, 1).toUpperCase()}
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <CardTitle className="truncate text-base">{a.facebookUserName ?? a.facebookUserId}</CardTitle>
+                      <p className="mt-0.5 text-xs text-foreground/50">{a.facebookUserId}</p>
+                    </div>
                   </div>
-                  <StatusBadge value={a.status} />
+                  <StatusBadge value={a.status} label={ACCOUNT_STATUS_LABELS[a.status]} />
                 </CardHeader>
                 <CardContent className="flex items-center justify-between">
                   <div className="text-sm text-foreground/60">

@@ -9,8 +9,8 @@ export const FACEBOOK_OAUTH_DIALOG_BASE = 'https://www.facebook.com';
 /** Campos solicitados al listar páginas en /me/accounts. */
 export const FACEBOOK_PAGE_FIELDS =
   'id,name,category,access_token,fan_count,picture{url},link,is_published';
-/** Campos del perfil del usuario de Facebook en /me. */
-export const FACEBOOK_ME_FIELDS = 'id,name,email,first_name,last_name';
+/** Campos del perfil del usuario de Facebook en /me (incluye su foto de perfil). */
+export const FACEBOOK_ME_FIELDS = 'id,name,email,first_name,last_name,picture{url}';
 /** Campos que suscribimos vía /{page_id}/subscribed_apps para el webhook de comentarios.
  *  En la API v26 el objeto Página ya no expone el campo `comments`: llegan por `feed`
  *  con value.item === 'comment' (WebhooksService.processCommentEvent). */

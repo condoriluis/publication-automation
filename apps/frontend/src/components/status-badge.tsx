@@ -29,8 +29,43 @@ const MAP: Record<string, Variant> = {
   HIGH: 'destructive',
 };
 
-export function StatusBadge({ value, className }: { value: string; className?: string }) {
+const LABELS: Record<string, string> = {
+  DRAFT: 'Borrador',
+  SCHEDULED: 'Programado',
+  PUBLISHING: 'Publicando',
+  PUBLISHED: 'Publicado',
+  PARTIALLY_FAILED: 'Fallido parcial',
+  FAILED: 'Fallido',
+  CANCELLED: 'Cancelado',
+  RUNNING: 'En curso',
+  PAUSED: 'En pausa',
+  COMPLETED: 'Completada',
+  ACTIVE: 'Activa',
+  EXPIRED: 'Expirado',
+  REVOKED: 'Revocado',
+  DISCONNECTED: 'Desconectado',
+  DISABLED: 'Deshabilitada',
+  VISIBLE: 'Visible',
+  HIDDEN: 'Oculta',
+  DELETED: 'Eliminado',
+  RESPONSED: 'Respondido',
+  PENDING: 'Pendiente',
+  NONE: 'Ninguno',
+  LOW: 'Bajo',
+  MEDIUM: 'Medio',
+  HIGH: 'Alto',
+};
+
+interface StatusBadgeProps {
+  value: string;
+  /** Etiqueta legible (p.ej. "Conectada") que sobrescribe la traducción por defecto. */
+  label?: string;
+  className?: string;
+}
+
+export function StatusBadge({ value, label, className }: StatusBadgeProps) {
   const variant = MAP[value] ?? 'secondary';
+  const text = label ?? LABELS[value] ?? value;
   return (
     <span
       className={cn(
@@ -43,7 +78,7 @@ export function StatusBadge({ value, className }: { value: string; className?: s
         className,
       )}
     >
-      {value}
+      {text}
     </span>
   );
 }

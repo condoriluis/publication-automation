@@ -375,6 +375,7 @@ export class FacebookService {
       facebookUserId,
       facebookUserName: me?.name ?? null,
       email: me?.email ?? null,
+      pictureUrl: this.pictureUrl(me?.picture),
       accessTokenEncrypted,
       tokenType: 'long-lived',
       tokenExpiresAt,
@@ -406,12 +407,18 @@ export class FacebookService {
       orderBy: { createdAt: 'desc' },
       include: { _count: { select: { pages: true } } },
     });
-    return accounts.map(({ accessTokenEncrypted, refreshTokenEncrypted, _count, ...safe }) => {
+
+    // Backfill best-effort: las cuentas conectadas antes de existir `pictureUrl`
+    // se completan en la primera consulta sin romper el listado.
+    const enriched = await Promise.all(accounts.map((a) => this.enrichAccountProfile(a)));
+
+    return enriched.map((row, index) => {
+      const { accessTokenEncrypted, refreshTokenEncrypted, ...safe } = row;
       void accessTokenEncrypted;
       void refreshTokenEncrypted;
       return {
         ...safe,
-        pageCount: _count.pages,
+        pageCount: accounts[index]._count.pages,
       };
     });
   }
@@ -459,8 +466,13 @@ export class FacebookService {
     return res.data;
   }
 
-  private async getMe(accessToken: string): Promise<{ id: string; name?: string; email?: string }> {
-    return this.request<{ id: string; name?: string; email?: string }>('GET', '/me', {
+  private async getMe(accessToken: string): Promise<{
+    id: string;
+    name?: string;
+    email?: string;
+    picture?: MetaPictureField;
+  }> {
+    return this.request<{ id: string; name?: string; email?: string; picture?: MetaPictureField }>('GET', '/me', {
       params: { fields: FACEBOOK_ME_FIELDS, access_token: accessToken },
     });
   }
@@ -535,6 +547,33 @@ export class FacebookService {
 
   private pictureUrl(picture?: MetaPictureField): string | undefined {
     return picture?.url ?? picture?.data?.url ?? undefined;
+  }
+
+  /**
+   * Backfill best-effort del perfil de la cuenta (foto, nombre, email) cuando
+   * aún no está guardado. No lanza: un fallo solo deja la fila como está.
+   */
+  private async enrichAccountProfile(account: FacebookAccount): Promise<FacebookAccount> {
+    if (account.pictureUrl) return account;
+    try {
+      const token = this.crypto.decrypt(account.accessTokenEncrypted);
+      if (!token?.trim()) return account;
+      const me = await this.getMe(token);
+      if (me?.id && me.id !== account.facebookUserId) return account;
+      const pictureUrl = this.pictureUrl(me?.picture);
+      if (!pictureUrl) return account;
+      return this.prisma.facebookAccount.update({
+        where: { id: account.id },
+        data: {
+          pictureUrl,
+          facebookUserName: me.name ?? account.facebookUserName,
+          email: me.email ?? account.email,
+        },
+      });
+    } catch (err) {
+      this.logger.warn(`No se pudo refrescar el perfil de la cuenta ${account.id}: ${(err as Error).message}`);
+      return account;
+    }
   }
 
   private toSafeFacebookAccount(account: FacebookAccount): SafeFacebookAccount {

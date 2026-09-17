@@ -110,6 +110,7 @@ model FacebookAccount {
   facebookUserId        String
   facebookUserName      String?
   email                 String?
+  pictureUrl            String?
   // Token de acceso del usuario (cifrado en reposo con AES-256-GCM)
   accessTokenEncrypted  String
   tokenType             String   @default("long-lived")

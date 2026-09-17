@@ -58,6 +58,7 @@ export interface SafeFacebookAccount {
   facebookUserId: string;
   facebookUserName: string | null;
   email: string | null;
+  pictureUrl: string | null;
   tokenType: string;
   tokenExpiresAt: string | null;
   scopes: unknown;
