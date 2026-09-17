@@ -9,7 +9,13 @@ export const AI_DEFAULT_BASE_URLS: Record<AiProviderName, string> = {
   openrouter: 'https://openrouter.ai/api/v1',
 };
 
-export const AI_MAX_TOKENS = 4096;
+export const AI_MAX_TOKENS = 12288;
+
+/**
+ * Tope máximo del presupuesto escalado en los reintentos: evita superar el
+ * límite de salida que admite cada proveedor al multiplicar AI_MAX_TOKENS.
+ */
+export const AI_MAX_SCALED_TOKENS = 32_768;
 export const AI_TEMPERATURE = 0.7;
 export const AI_TIMEOUT_MS = 60_000;
 

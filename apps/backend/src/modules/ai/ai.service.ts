@@ -7,6 +7,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AppLogger } from '../../common/logger/app-logger.service';
 import { AIConfigService } from './ai-config.service';
 import {
+  AI_MAX_SCALED_TOKENS,
   AI_MAX_TOKENS,
   ANALYZE_SYSTEM_PROMPT,
   COMMENT_REPLY_SYSTEM_PROMPT,
@@ -17,6 +18,17 @@ import {
   PostLength,
   POST_LENGTH_HINTS,
 } from './ai.constants';
+
+/** Respuesta mínima del endpoint /chat/completions (openai-compatible). */
+interface OpenAiChatResponse {
+  choices?: Array<{
+    message?: { content?: string };
+    finish_reason?: string;
+  }>;
+}
+
+/** Factor para escalar el presupuesto de tokens en reintentos de respuestas vacías. */
+const AI_SCALED_TOKEN_FACTOR = 3;
 
 /** Se lanza cuando la IA no está configurada o el proveedor no responde. */
 export class AiUnavailableError extends Error {
@@ -357,7 +369,7 @@ this.logger.log(`Análisis automático de comentarios: ${analyzed.length}/${ids.
     maxTokens: number;
   }): Promise<string> {
     const baseUrl = args.baseUrl.replace(/\/$/, '');
-    const { data } = await axios.post<{ choices?: Array<{ message?: { content?: string } }> }>(
+    const { data } = await axios.post<OpenAiChatResponse>(
       `${baseUrl}/chat/completions`,
       {
         model: args.model,
@@ -370,13 +382,57 @@ this.logger.log(`Análisis automático de comentarios: ${analyzed.length}/${ids.
       },
       { headers: { Authorization: `Bearer ${args.apiKey}`, 'Content-Type': 'application/json' }, timeout: 60_000 },
     );
-    const content = data.choices?.[0]?.message?.content?.trim();
-    if (!content) {
-      this.logger.error(`Respuesta de IA vacía o malformada. Data: ${JSON.stringify(data)}`);
-      throw new AiUnavailableError('El proveedor de IA devolvió una respuesta vacía');
+    const choice = data.choices?.[0];
+    const content = choice?.message?.content?.trim();
+
+    if (content) {
+      this.logger.debug(`IA (openai-compatible) generó ${content.length} chars`);
+      return content;
     }
-    this.logger.debug(`IA (openai-compatible) generó ${content.length} chars`);
-    return content;
+
+    // Los modelos de razonamiento (p.ej. gpt-oss vía Groq) pueden agotar el
+    // presupuesto "pensando" en voz alta y devolver content vacío con
+    // finish_reason "length". En ese caso escalamos el presupuesto UNA vez y
+    // pedimos la respuesta directa, sin razonamiento intermedio.
+    if (choice?.finish_reason === 'length') {
+      const scaled = Math.min(args.maxTokens * AI_SCALED_TOKEN_FACTOR, AI_MAX_SCALED_TOKENS);
+      if (scaled > args.maxTokens) {
+        this.logger.warn(
+          `IA devolvió vacío (finish_reason=length) con ${args.maxTokens} tokens; reintento con ${scaled}`,
+        );
+        const { data: retried } = await axios.post<OpenAiChatResponse>(
+          `${baseUrl}/chat/completions`,
+          {
+            model: args.model,
+            temperature: 0.7,
+            max_tokens: scaled,
+            messages: [
+              {
+                role: 'system',
+                content:
+                  `${args.system}\n\nInstrucción: responde DIRECTAMENTE con el texto final solicitado. ` +
+                  'No razones en voz alta, no te autocorrijas ni repitas borradores: el razonamiento ya está hecho.',
+              },
+              { role: 'user', content: args.user },
+            ],
+          },
+          { headers: { Authorization: `Bearer ${args.apiKey}`, 'Content-Type': 'application/json' }, timeout: 60_000 },
+        );
+        const retriedContent = retried.choices?.[0]?.message?.content?.trim();
+        if (retriedContent) {
+          this.logger.debug(`IA (openai-compatible) generó ${retriedContent.length} chars tras escalar presupuesto`);
+          return retriedContent;
+        }
+        this.logger.error(
+          `IA aún vacía tras escalar presupuesto (finish_reason=${retried.choices?.[0]?.finish_reason ?? 'desconocido'})`,
+        );
+      }
+    }
+
+    this.logger.error(
+      `Respuesta de IA vacía o malformada (finish_reason: ${choice?.finish_reason ?? 'desconocido'}, modelo: ${args.model})`,
+    );
+    throw new AiUnavailableError('El proveedor de IA devolvió una respuesta vacía');
   }
 
   private async chatAnthropic(args: {
