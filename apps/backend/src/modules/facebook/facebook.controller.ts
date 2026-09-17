@@ -5,8 +5,10 @@ import {
   Get,
   Param,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import { Request } from 'express';
 import {
   CurrentUser,
   Public,
@@ -35,6 +37,19 @@ export class FacebookController {
       authorizeUrl: this.facebook.getOAuthUrl(state),
       state,
       expiresInSeconds: OAUTH_STATE_TTL_MS / 1000,
+    };
+  }
+
+  /** Config pública (sin secretos) para la guía dinámica del frontend. */
+  @Public()
+  @Get('config')
+  getPublicConfig(@Req() req: Request) {
+    const cfg = this.facebook.getPublicConfig();
+    const protocol = req.protocol === 'http' ? 'http' : 'https';
+    const host = req.get('host') ?? '';
+    return {
+      ...cfg,
+      webhookUrl: `${protocol}://${host}/webhooks/meta`,
     };
   }
 

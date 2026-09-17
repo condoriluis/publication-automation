@@ -74,6 +74,15 @@ export interface OAuthStart {
   expiresInSeconds: number;
 }
 
+/** Config pública de la integración con Facebook (para la guía dinámica). */
+export interface FacebookPublicConfig {
+  appId: string;
+  apiVersion: string;
+  scopes: string[];
+  redirectUri: string;
+  webhookUrl: string;
+}
+
 export interface PageListRow {
   id: string;
   name: string;

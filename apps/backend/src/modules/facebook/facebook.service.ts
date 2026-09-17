@@ -55,6 +55,14 @@ export interface MetaTokenResponse {
   expires_in?: number;
 }
 
+/** Config pública y segura (sin secretos) para la guía dinámica del frontend. */
+export interface FacebookPublicConfig {
+  appId: string;
+  apiVersion: string;
+  scopes: string[];
+  redirectUri: string;
+}
+
 /** Payload de /debug_token. */
 export interface MetaDebugTokenData {
   app_id: string;
@@ -251,6 +259,16 @@ export class FacebookService {
     if (exp === undefined) return false;
     this.pendingOAuthStates.delete(state);
     return exp > Date.now();
+  }
+
+  /** Config pública y segura (sin secrets) para la guía dinámica del frontend. */
+  getPublicConfig(): FacebookPublicConfig {
+    return {
+      appId: this.config.facebookAppId,
+      apiVersion: this.config.facebookApiVersion,
+      scopes: this.config.facebookScopes,
+      redirectUri: this.config.facebookRedirectUri,
+    };
   }
 
   /** URL del diálogo de autorización de Meta (www.facebook.com/{version}/dialog/oauth). */
