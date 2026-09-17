@@ -54,8 +54,8 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader className="flex-row items-center justify-between space-y-0">
+        <Card className="min-w-0 lg:col-span-2">
+          <CardHeader className="flex flex-wrap items-center justify-between gap-2 space-y-0">
             <CardTitle className="text-base">Actividad reciente</CardTitle>
             {t.respuestasPendientes > 0 ? (
               <span className="flex items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400">
@@ -64,14 +64,14 @@ export default function DashboardPage() {
               </span>
             ) : null}
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-0 sm:p-6">
             {data.actividadReciente.data.length === 0 ? (
               <EmptyState title="Sin actividad todavía" description="Las acciones quedarán registradas aquí." />
             ) : (
               <ul className="divide-y">
                 {data.actividadReciente.data.map((a) => (
-                  <li key={a.id} className="flex items-center gap-3 py-3">
-                    <StatusBadge value={a.action} className="min-w-0" />
+                  <li key={a.id} className="flex flex-wrap items-center gap-2 px-4 py-3 sm:px-0">
+                    <StatusBadge value={a.action} className="shrink-0" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm">{a.action}</p>
                       <p className="truncate text-xs text-foreground/50">
@@ -90,11 +90,11 @@ export default function DashboardPage() {
           <CardHeader>
             <CardTitle className="text-base">Panel de control</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            <ActionRow href="/pages" label="Conectar una página" />
-            <ActionRow href="/campaigns/new" label="Crear campaña" />
-            <ActionRow href="/posts/new" label="Crear publicación" />
-            <ActionRow href="/ai" label="Generar contenido con IA" />
+          <CardContent className="grid grid-cols-2 gap-2 text-sm sm:block sm:space-y-3">
+            <ActionRow href="/pages" label="Conectar página" shortLabel="Páginas" />
+            <ActionRow href="/campaigns/new" label="Crear campaña" shortLabel="Campaña" />
+            <ActionRow href="/posts/new" label="Crear publicación" shortLabel="Publicar" />
+            <ActionRow href="/ai" label="Generar contenido con IA" shortLabel="Contenido IA" />
           </CardContent>
         </Card>
       </div>
@@ -105,14 +105,14 @@ export default function DashboardPage() {
 function StatCard({ label, value, icon: Icon, href, color, bg }: StatCardDef) {
   return (
     <Link href={href} className="group">
-      <div className="rounded-xl border bg-card p-4 shadow-sm transition-all group-hover:-translate-y-0.5 group-hover:border-[#1877F2]/40 group-hover:shadow-md">
-        <div className="flex items-center gap-3">
-          <span className={`flex size-10 shrink-0 items-center justify-center rounded-full ${bg}`}>
-            <Icon className={`size-5 ${color}`} />
+      <div className="rounded-xl border bg-card p-3 shadow-sm transition-all group-hover:-translate-y-0.5 group-hover:border-[#1877F2]/40 group-hover:shadow-md sm:p-4">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <span className={`flex size-8 shrink-0 items-center justify-center rounded-full ${bg} sm:size-10`}>
+            <Icon className={`size-4 ${color} sm:size-5`} />
           </span>
           <div className="min-w-0">
-            <p className="text-2xl font-bold leading-none tabular-nums">{value}</p>
-            <p className="mt-1 truncate text-xs font-medium text-muted-foreground">{label}</p>
+            <p className="text-xl font-bold leading-none tabular-nums sm:text-2xl">{value}</p>
+            <p className="mt-0.5 truncate text-[11px] font-medium text-muted-foreground sm:mt-1 sm:text-xs">{label}</p>
           </div>
         </div>
       </div>
@@ -120,10 +120,13 @@ function StatCard({ label, value, icon: Icon, href, color, bg }: StatCardDef) {
   );
 }
 
-function ActionRow({ href, label }: { href: string; label: string }) {
+function ActionRow({ href, label, shortLabel }: { href: string; label: string; shortLabel?: string }) {
   return (
     <Link href={href} className="flex items-center justify-between rounded-lg border p-3 transition-colors hover:bg-muted">
-      <span className="font-medium">{label}</span>
+      <span className="font-medium">
+        <span className="hidden sm:inline">{label}</span>
+        <span className="sm:hidden">{shortLabel ?? label}</span>
+      </span>
       <ArrowUpRight className="size-4 text-foreground/40" />
     </Link>
   );
