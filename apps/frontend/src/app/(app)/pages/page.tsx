@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Link2, Unplug, RefreshCw } from 'lucide-react';
+import { Link2, Unplug, RefreshCw, BookOpen } from 'lucide-react';
 import { type ColumnDef } from '@tanstack/react-table';
 
 import { api } from '@/lib/api';
@@ -14,6 +14,8 @@ import { StatusBadge } from '@/components/status-badge';
 import { EmptyState } from '@/components/empty-state';
 import { LoadingRows } from '@/components/pagination';
 import { DataTable } from '@/components/ui/data-table';
+import { FacebookIcon } from '@/components/facebook-icon';
+import { TutorialFacebookGuide } from '@/components/tutorial-facebook-guide';
 import { formatDate } from '@/lib/utils';
 
 export default function PagesPage() {
@@ -22,6 +24,7 @@ export default function PagesPage() {
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [tutorialOpen, setTutorialOpen] = useState(false);
 
   const load = useCallback(() => {
     return Promise.all([
@@ -129,10 +132,17 @@ export default function PagesPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Páginas" subtitle="Cuentas de Facebook conectadas y sus páginas">
-        <Button disabled={connecting} onClick={() => void connect()}>
-          {connecting ? 'Preparando…' : 'Conectar cuenta de Facebook'}
-        </Button>
-      </PageHeader>
+          <Button variant="outline" onClick={() => setTutorialOpen(true)}>
+            <BookOpen className="size-4 text-[#1877F2]" />
+            Tutorial
+          </Button>
+          <Button disabled={connecting} className="bg-[#1877F2] hover:bg-[#0A5BC4] text-white shadow-sm" onClick={() => void connect()}>
+            <FacebookIcon className="size-4" />
+            {connecting ? 'Preparando…' : 'Conectar cuenta de Facebook'}
+          </Button>
+        </PageHeader>
+
+      <TutorialFacebookGuide open={tutorialOpen} onClose={() => setTutorialOpen(false)} />
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
