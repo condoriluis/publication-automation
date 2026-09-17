@@ -136,6 +136,7 @@ export function FacebookPostPreview({
   headerExtra,
 }: FacebookPostPreviewProps) {
   const fragments = parseContent(content);
+  const urlInContent = Boolean(linkUrl && content.includes(linkUrl));
   const initials = (pageName ?? 'P').slice(0, 2).toUpperCase();
   const [expanded, setExpanded] = useState(false);
   const hasMedia = imageUrls.length > 0 || !!videoUrl;
@@ -186,7 +187,7 @@ export function FacebookPostPreview({
         )}
       </p>
 
-      {linkUrl && !hasMedia ? <LinkCard url={linkUrl} /> : null}
+      {linkUrl && !urlInContent ? <LinkCard url={linkUrl} /> : null}
 
       {/* Media */}
       {videoUrl ? (
