@@ -1,4 +1,9 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma, Role, User, UserRole } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
@@ -99,12 +104,36 @@ export class UsersService {
   async update(id: string, dto: UpdateUserDto): Promise<PublicUser> {
     const existing = await this.findById(id);
     if (!existing) throw new NotFoundException('Usuario no encontrado');
+
+    // Unicidad de credenciales frente a OTROS usuarios.
+    if (dto.email !== undefined || dto.username !== undefined) {
+      const conflict = await this.prisma.user.findFirst({
+        where: {
+          id: { not: id },
+          OR: [{ email: dto.email }, { username: dto.username }],
+        },
+      });
+      if (conflict) throw new ConflictException('El email o username ya está en uso por otro usuario');
+    }
+
+    // Seguridad: nunca dejar al sistema sin al menos un ADMIN activo.
+    const isAdmin = this.hasRole(existing, Role.ADMIN);
+    const removesAdminRole =
+      Array.isArray(dto.roles) && !this.resolveRoles(dto.roles.map((r) => r as string)).includes(Role.ADMIN);
+    if (isAdmin && existing.isActive && (dto.isActive === false || removesAdminRole)) {
+      await this.assertNotLastActiveAdmin(id);
+    }
+
     const data: Prisma.UserUpdateInput = {
+      email: dto.email,
+      username: dto.username,
       displayName: dto.displayName,
       bio: dto.bio,
       avatarUrl: dto.avatarUrl,
       isActive: dto.isActive,
+      ...(dto.password ? { passwordHash: await bcrypt.hash(dto.password, this.rounds) } : {}),
     };
+
     return this.prisma.$transaction(async (tx) => {
       if (dto.roles) {
         await tx.userRole.deleteMany({ where: { userId: id } });
@@ -119,6 +148,9 @@ export class UsersService {
   async remove(id: string): Promise<{ success: boolean }> {
     const existing = await this.findById(id);
     if (!existing) throw new NotFoundException('Usuario no encontrado');
+    if (this.hasRole(existing, Role.ADMIN) && existing.isActive) {
+      await this.assertNotLastActiveAdmin(id);
+    }
     await this.prisma.user.delete({ where: { id } });
     this.logger.log(`Usuario eliminado: ${existing.email}`, 'Users');
     return { success: true };
@@ -147,5 +179,23 @@ export class UsersService {
     const source = roles.length ? roles : [Role.OPERATOR];
     const valid = Array.from(new Set(source)).filter((r): r is Role => r in ROLE_MATRIX);
     return valid.length ? valid : [Role.OPERATOR];
+  }
+
+  private hasRole(user: UserWithRoles, role: Role): boolean {
+    return user.roles.some((r) => r.role === role);
+  }
+
+  /** Garantiza que no se deja el sistema sin al menos un administrador activo. */
+  private async assertNotLastActiveAdmin(excludeId: string): Promise<void> {
+    const otherAdmins = await this.prisma.user.count({
+      where: {
+        id: { not: excludeId },
+        isActive: true,
+        roles: { some: { role: Role.ADMIN } },
+      },
+    });
+    if (otherAdmins === 0) {
+      throw new BadRequestException('No se puede dejar el sistema sin al menos un administrador activo');
+    }
   }
 }

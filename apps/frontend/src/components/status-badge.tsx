@@ -54,6 +54,9 @@ const LABELS: Record<string, string> = {
   LOW: 'Bajo',
   MEDIUM: 'Medio',
   HIGH: 'Alto',
+  ADMIN: 'Administrador',
+  MANAGER: 'Gestor',
+  OPERATOR: 'Operador',
 };
 
 interface StatusBadgeProps {
