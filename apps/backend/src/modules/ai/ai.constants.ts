@@ -57,6 +57,9 @@ export const GENERATE_POST_SYSTEM_PROMPT =
   '- Tono persuasivo, cercano y profesional, en español. ' +
   '- Cumplimiento Meta: sin métricas inventadas, sin promesas de ingresos, sin clickbait manipulador ("no vas a creer", ' +
   '  "gana $1000 al día"), sin contenido engañoso ni sensacionalista. ' +
+  '- SONIDO HUMANO Y NATURAL: escribe como una persona real del nicho, no como un bot. ' +
+  '  Evita muletillas de IA ("en el dinámico mundo de", "no solo... sino también", "potencia", "revolucionario", "en resumen"), ' +
+  '  estructuras rígidas y vocabulario extremadamente formal. Usa frases de longitud variada y un tono conversacional auténtico. ' +
   '- Originalidad: cambia cada vez el ángulo, los ejemplos y el tono. ' +
   '- Respetar el rango de palabras solicitado; el relleno prohíbe inflar la extensión. ' +
   'SALIDA: devuelve EXCLUSIVAMENTE el texto final del post, sin comillas iniciales/finales, sin títulos ni comentarios, y sin texto introductorio.';

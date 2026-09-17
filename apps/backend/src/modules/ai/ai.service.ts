@@ -133,13 +133,16 @@ export class AiService {
   /** Genera automáticamente la configuración de una campaña a partir del título. */
   async generateCampaignConfig(input: GenerateCampaignConfigInput): Promise<CampaignConfigResult> {
     const system =
-      'Eres un experto en marketing digital y copywriter certificado en politicas de Meta. ' +
+      'Eres un estratega de contenido y copywriter senior especializado en Facebook, con enfoque en crecimiento orgánico y monetización. ' +
       'Disena la configuracion inicial de una campana automatizada para Facebook. ' +
       'REGLAS para el contentTemplate: ' +
       '1) Texto plano: CERO asteriscos, CERO guiones, CERO Markdown. ' +
-      '2) Usa emojis como vinetas (cuadro verde, cohete, bombilla, rayo). ' +
-      '3) ESTRUCTURA: Titular impactante, 3 puntos clave con emojis, Pregunta abierta, 3-5 hashtags. ' +
-      '4) Sin metricas inventadas ni afirmaciones enganosas (cumplimiento Meta). ' +
+      '2) ESTRUCTURA VIRAL: hook de retención en las 2 primeras líneas, 3-4 puntos clave con emojis como viñetas (✅ 🚀 💡 ⚡), ' +
+      '   pregunta abierta final para engagement, y exactamente 3-5 hashtags (populares + nicho). ' +
+      '3) SONIDO HUMANO: escribe como una persona real del nicho, no como un bot. Sin muletillas de IA ' +
+      '   ("en el dinámico mundo de", "potencia", "revolucionario", "en resumen") y con frases de longitud variada. ' +
+      '4) CERO relleno: cada línea aporta valor. Sin métricas inventadas, promesas de ingresos ni clickbait manipulador (cumplimiento Meta). ' +
+      '5) Adapta el tema al nicho de la página. ' +
       'Responde SOLO con JSON valido, sin texto extra: ' +
       '{"description":"Justificacion breve (1-2 frases)","contentTemplate":"Post completo con estructura viral","intervalSeconds":3600}';
 
