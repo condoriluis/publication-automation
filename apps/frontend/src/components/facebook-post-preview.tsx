@@ -17,6 +17,15 @@ function parseContent(content: string): Fragment[] {
     });
 }
 
+function Tile({ src, label }: { src: string; label: string }) {
+  return (
+    <div className="relative h-full w-full overflow-hidden">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt={label} className="h-full w-full object-cover" />
+    </div>
+  );
+}
+
 function ImageGrid({ images, expanded, onToggle }: { images: string[]; expanded: boolean; onToggle: () => void }) {
   if (images.length === 0) return null;
 
@@ -26,13 +35,6 @@ function ImageGrid({ images, expanded, onToggle }: { images: string[]; expanded:
         +{images.length - 4}
       </div>
     ) : null;
-
-  const Img = ({ src, label }: { src: string; label: string }) => (
-    <div className="relative h-full w-full overflow-hidden">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} alt={label} className="h-full w-full object-cover" />
-    </div>
-  );
 
   const single = images.length === 1;
   const wrapClass = expanded ? 'w-full cursor-zoom-out' : 'w-full cursor-zoom-in';
@@ -56,24 +58,24 @@ function ImageGrid({ images, expanded, onToggle }: { images: string[]; expanded:
         </div>
       ) : images.length === 2 ? (
         <div className="grid h-full grid-cols-2 gap-px bg-black/5" style={expanded ? undefined : { aspectRatio: '16 / 9', maxHeight: '360px' }}>
-          <Img src={images[0]!} label="Imagen 1" />
-          <Img src={images[1]!} label="Imagen 2" />
+          <Tile src={images[0]!} label="Imagen 1" />
+          <Tile src={images[1]!} label="Imagen 2" />
         </div>
       ) : images.length === 3 ? (
         <div className="grid h-full grid-cols-2 gap-px bg-black/5" style={expanded ? undefined : { maxHeight: '360px' }}>
           <div className="row-span-2 overflow-hidden">
-            <Img src={images[0]!} label="Imagen 1" />
+            <Tile src={images[0]!} label="Imagen 1" />
           </div>
-          <Img src={images[1]!} label="Imagen 2" />
-          <Img src={images[2]!} label="Imagen 3" />
+          <Tile src={images[1]!} label="Imagen 2" />
+          <Tile src={images[2]!} label="Imagen 3" />
         </div>
       ) : (
         <div className="grid h-full grid-cols-2 gap-px bg-black/5" style={expanded ? undefined : { maxHeight: '360px' }}>
-          <Img src={images[0]!} label="Imagen 1" />
-          <Img src={images[1]!} label="Imagen 2" />
-          <Img src={images[2]!} label="Imagen 3" />
+          <Tile src={images[0]!} label="Imagen 1" />
+          <Tile src={images[1]!} label="Imagen 2" />
+          <Tile src={images[2]!} label="Imagen 3" />
           <div className="relative">
-            <Img src={images[3]!} label="Imagen 4" />
+            <Tile src={images[3]!} label="Imagen 4" />
             {overlay}
           </div>
         </div>
@@ -139,7 +141,6 @@ export function FacebookPostPreview({
   const urlInContent = Boolean(linkUrl && content.includes(linkUrl));
   const initials = (pageName ?? 'P').slice(0, 2).toUpperCase();
   const [expanded, setExpanded] = useState(false);
-  const hasMedia = imageUrls.length > 0 || !!videoUrl;
 
   return (
     <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
@@ -192,7 +193,6 @@ export function FacebookPostPreview({
       {/* Media */}
       {videoUrl ? (
         <div className="mt-3 w-full overflow-hidden rounded-lg border border-black/5" style={expanded ? undefined : { maxHeight: '480px' }}>
-          {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
           <video src={videoUrl} controls className="h-full w-full object-cover" style={expanded ? undefined : { aspectRatio: '16 / 9' }} />
         </div>
       ) : null}

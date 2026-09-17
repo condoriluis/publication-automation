@@ -1,5 +1,6 @@
 'use client';
 
+import * as React from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -43,6 +44,14 @@ const RISK_LABELS: Record<RiskLevel, { label: string; className: string }> = {
 };
 
 export default function CommentsPage() {
+  return (
+    <React.Suspense fallback={<LoadingRows rows={4} />}>
+      <CommentsContent />
+    </React.Suspense>
+  );
+}
+
+function CommentsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [data, setData] = useState<Paginated<CommentDetail> | null>(null);

@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { ArrowLeft, Play, X, Trash2, ExternalLink, RefreshCw, Loader2,
-  MessageSquare, ThumbsUp, Share2, Eye, TrendingUp, Bot, CheckCircle2, Clock, ChevronRight,
+  MessageSquare, ThumbsUp, Share2, Eye, TrendingUp, Bot, Clock, ChevronRight,
 } from 'lucide-react';
 
 import { api } from '@/lib/api';

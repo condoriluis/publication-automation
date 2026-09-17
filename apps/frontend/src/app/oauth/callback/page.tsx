@@ -20,16 +20,15 @@ function CallbackContent() {
   React.useEffect(() => {
     const code = searchParams.get('code');
     const state = searchParams.get('state');
-    if (!code || !state) {
-      setStatus('error');
-      setError('Faltan los parámetros de autorización. Vuelve a intentar conectar la cuenta.');
-      return;
-    }
 
     let closed = false;
-    (async () => {
-      try {
-        await api.get(`/facebook/oauth/callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}`);
+    const request =
+      code && state
+        ? api.get(`/facebook/oauth/callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}`)
+        : Promise.reject(new Error('Faltan los parámetros de autorización. Vuelve a intentar conectar la cuenta.'));
+
+    request
+      .then(() => {
         setStatus('success');
         try {
           new BroadcastChannel(OAUTH_RESULT_CHANNEL).postMessage({ type: 'connected' });
@@ -40,11 +39,11 @@ function CallbackContent() {
           window.close();
           closed = true;
         }, CLOSE_DELAY_MS);
-      } catch (e) {
+      })
+      .catch((e) => {
         setStatus('error');
         setError(e instanceof Error ? e.message : 'No se pudo conectar la cuenta de Facebook');
-      }
-    })();
+      });
   }, [searchParams]);
 
   return (

@@ -1,16 +1,15 @@
-import { FlatCompat } from '@eslint/eslintrc';
-import { dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { globalIgnores } from 'eslint/config';
+import nextVitals from 'eslint-config-next/core-web-vitals';
+import nextTypescript from 'eslint-config-next/typescript';
 
 /**
- * ESLint 9 flat config para Next.js: traducimos las presets legacy
- * "next/core-web-vitals" y "next/typescript" a FlatConfigArray.
+ * ESLint 9 flat config para Next.js.
+ * eslint-config-next (v16) ya exporta la configuración en formato flat
+ * (arrays de FlatConfig); usarlos directamente evita la doble conversión
+ * de FlatCompat, que provocaba una referencia circular en plugins.react.
  */
-const compat = new FlatCompat({
-  baseDirectory: dirname(fileURLToPath(import.meta.url)),
-});
-
 export default [
-  { ignores: ['**/.next/**', '**/node_modules/**', '**/out/**', '**/dist/**', '**/build/**', '**/next-env.d.ts'] },
-  ...compat.extends('next/core-web-vitals', 'next/typescript'),
+  globalIgnores(['**/.next/**', '**/node_modules/**', '**/out/**', '**/dist/**', '**/build/**', '**/next-env.d.ts']),
+  ...nextVitals,
+  ...nextTypescript,
 ];

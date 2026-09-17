@@ -23,19 +23,24 @@ export default function PagesPage() {
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    try {
-      const [accs, list] = await Promise.all([
-        api.get<SafeFacebookAccount[]>('/facebook/accounts'),
-        api.get<Paginated<PageListRow>>(`/pages?page=1&limit=100`),
-      ]);
-      setAccounts(accs);
-      setPages(list.data);
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error al cargar páginas');
-    }
+  const load = useCallback(() => {
+    return Promise.all([
+      api.get<SafeFacebookAccount[]>('/facebook/accounts'),
+      api.get<Paginated<PageListRow>>(`/pages?page=1&limit=100`),
+    ])
+      .then(([accs, list]) => {
+        setAccounts(accs);
+        setPages(list.data);
+      })
+      .catch((e) => {
+        setError(e instanceof Error ? e.message : 'Error al cargar páginas');
+      });
   }, []);
+
+  const reload = useCallback(() => {
+    setError(null);
+    void load();
+  }, [load]);
 
   useEffect(() => {
     void load();
@@ -46,12 +51,12 @@ export default function PagesPage() {
     const onMessage = (e: MessageEvent) => {
       if (e.data?.type === 'connected') {
         toast.success('Cuenta de Facebook conectada');
-        void load();
+        void reload();
       }
     };
     channel.addEventListener('message', onMessage);
     return () => channel.close();
-  }, [load]);
+  }, [reload]);
 
   async function connect() {
     setConnecting(true);
@@ -171,7 +176,7 @@ export default function PagesPage() {
       <section>
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-sm font-medium text-foreground/70">Páginas de Facebook</h3>
-          <Button size="sm" variant="outline" onClick={() => void load()}>
+          <Button size="sm" variant="outline" onClick={() => void reload()}>
             <RefreshCw className="size-3.5" /> Refrescar
           </Button>
         </div>

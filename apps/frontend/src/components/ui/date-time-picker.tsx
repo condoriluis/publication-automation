@@ -31,8 +31,12 @@ export function DateTimePicker({ value, onChange, className }: DateTimePickerPro
       ? `${dateObj.getHours().toString().padStart(2, '0')}:${dateObj.getMinutes().toString().padStart(2, '0')}`
       : "12:00"
   );
-  
-  React.useEffect(() => {
+
+  // Sincroniza el estado interno cuando cambia `value` desde fuera.
+  // Ajuste de estado durante el render (patrón recomendado por React).
+  const [prevValue, setPrevValue] = React.useState(value);
+  if (value !== prevValue) {
+    setPrevValue(value);
     if (value) {
       const d = new Date(value);
       setDate(d);
@@ -40,7 +44,7 @@ export function DateTimePicker({ value, onChange, className }: DateTimePickerPro
     } else {
       setDate(undefined);
     }
-  }, [value]);
+  }
 
   const handleDateSelect = (selectedDate: Date | undefined) => {
     setDate(selectedDate);

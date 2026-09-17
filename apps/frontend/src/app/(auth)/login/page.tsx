@@ -27,6 +27,17 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = React.useState(false);
   const [form, setForm] = React.useState({ email: '', password: '' });
 
+  /* Email recordado: se hidrata tras el primer render (evita romper SSR). */
+  const [emailLoaded, setEmailLoaded] = React.useState(false);
+  if (!emailLoaded && typeof window !== 'undefined') {
+    const saved = localStorage.getItem(REMEMBER_KEY);
+    setEmailLoaded(true);
+    if (saved) {
+      setRememberMe(true);
+      setForm((f) => ({ ...f, email: saved }));
+    }
+  }
+
   /* --- reCAPTCHA v2: token + reset controlado por el padre --- */
   const [captchaToken, setCaptchaToken] = React.useState<string | null>(null);
   const [captchaReset, setCaptchaReset] = React.useState(0);
@@ -43,15 +54,6 @@ export default function LoginPage() {
       cancelled = true;
     };
   }, [router]);
-
-  /* Email recordado al montar */
-  React.useEffect(() => {
-    const saved = localStorage.getItem(REMEMBER_KEY);
-    if (saved) {
-      setForm((f) => ({ ...f, email: saved }));
-      setRememberMe(true);
-    }
-  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();

@@ -25,9 +25,17 @@ import {
 // ─── Countdown hook ─────────────────────────────────────────────────────────
 function useCountdown(intervalSeconds: number, isRunning: boolean) {
   const [remaining, setRemaining] = useState(intervalSeconds);
-  useEffect(() => {
-    if (!isRunning) { setRemaining(intervalSeconds); return; }
+
+  // Reinicia la cuenta cuando cambian el intervalo o el estado de ejecución
+  // (ajuste de estado durante el render, patrón recomendado por React).
+  const [prevConfig, setPrevConfig] = useState({ intervalSeconds, isRunning });
+  if (prevConfig.intervalSeconds !== intervalSeconds || prevConfig.isRunning !== isRunning) {
+    setPrevConfig({ intervalSeconds, isRunning });
     setRemaining(intervalSeconds);
+  }
+
+  useEffect(() => {
+    if (!isRunning) return;
     const tick = window.setInterval(() => {
       setRemaining((r) => {
         if (r <= 1) { return intervalSeconds; }

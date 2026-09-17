@@ -141,7 +141,7 @@ export default function NewPostPage() {
                 <Label htmlFor="content">Contenido</Label>
                 <Textarea id="content" rows={6} value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} required />
                 <p className="text-[11px] text-muted-foreground">
-                  <strong>Tip IA:</strong> Escribe un tema específico (ej. "Agentes de IA") para guiar a la IA. Si lo dejas en blanco y haces clic en "Generar con IA", se creará un post general basado en la categoría de tu página.
+                  <strong>Tip IA:</strong> Escribe un tema específico (ej. &quot;Agentes de IA&quot;) para guiar a la IA. Si lo dejas en blanco y haces clic en &quot;Generar con IA&quot;, se creará un post general basado en la categoría de tu página.
                 </p>
               </div>
               <div className="space-y-2 sm:col-span-2">

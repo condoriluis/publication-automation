@@ -53,20 +53,22 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  useEffect(() => {
+  // El token se hidrata desde el almacenamiento tras el primer render para no
+  // romper el SSR; el estado se ajusta durante el render (patrón recomendado).
+  const [tokenLoaded, setTokenLoaded] = useState(false);
+  if (!tokenLoaded && typeof window !== 'undefined') {
     const token = getAccessToken();
+    setTokenLoaded(true);
     setAccessToken(token);
     setIsLoading(Boolean(token));
-  }, []);
+  }
 
   useEffect(() => {
     let cancelled = false;
     if (!accessToken) {
-      setIsLoading(false);
       return;
     }
 
-    setIsLoading(true);
     apiClient
       .post<User>('/auth/me')
       .then((meUser) => {

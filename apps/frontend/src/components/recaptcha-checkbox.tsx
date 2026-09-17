@@ -40,16 +40,15 @@ export function RecaptchaCheckbox({ onToken, resetSignal = 0 }: RecaptchaCheckbo
   const slotRef = React.useRef<HTMLDivElement>(null);
   const widgetIdRef = React.useRef<number | null>(null);
   const onTokenRef = React.useRef(onToken);
-  onTokenRef.current = onToken;
 
-  // Cambia el key del slot al cambiar el tema: el widget se re-renderiza con
-  // el nuevo tema (reCAPTCHA no permite cambiar theme sobre el mismo elemento).
-  const [version, setVersion] = React.useState(0);
-  const [scale, setScale] = React.useState(1);
-
+  // Mantiene el callback de token actualizado sin escribirlo durante el render.
   React.useEffect(() => {
-    setVersion((v) => v + 1);
-  }, [theme]);
+    onTokenRef.current = onToken;
+  });
+
+  // El widget se re-renderiza con `key` al cambiar el tema (reCAPTCHA no
+  // permite cambiar theme sobre el mismo elemento).
+  const [scale, setScale] = React.useState(1);
 
   // Escala el widget al ancho real del contenedor (igual al de los inputs).
   React.useEffect(() => {
@@ -100,7 +99,7 @@ export function RecaptchaCheckbox({ onToken, resetSignal = 0 }: RecaptchaCheckbo
       }
       window.paRecaptchaLoaded = render;
     }
-  }, [version, theme]);
+  }, [theme]);
 
   // Reset controlado desde el padre (p. ej. tras un login fallido).
   React.useEffect(() => {
@@ -120,7 +119,7 @@ export function RecaptchaCheckbox({ onToken, resetSignal = 0 }: RecaptchaCheckbo
     >
       <div
         ref={slotRef}
-        key={version}
+        key={theme}
         className="rounded-md"
         style={{
           width: WIDGET_WIDTH,

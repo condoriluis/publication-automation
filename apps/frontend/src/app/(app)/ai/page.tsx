@@ -17,7 +17,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { StatusBadge } from '@/components/status-badge';
 import { EmptyState } from '@/components/empty-state';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { formatRelative } from '@/lib/utils';
 
 const CLASSIFICATION_LABELS: Record<CommentClassification, { label: string; className: string }> = {
   INSULTO: { label: 'Insulto', className: '!bg-red-500/10 !text-red-600 dark:!text-red-400' },
@@ -55,12 +54,14 @@ export default function AiPage() {
     }).catch(() => { });
   }, []);
 
-  const loadPending = useCallback(async () => {
+  const loadPending = useCallback(() => {
     const q = pendingPage === 'all' ? '' : `&pageId=${pendingPage}`;
-    try {
-      const data = await api.get<Paginated<CommentDetail>>(`/comments?needsAnalysis=true&limit=100${q}`);
-      setPending(data);
-    } catch { /* ignore */ }
+    return api
+      .get<Paginated<CommentDetail>>(`/comments?needsAnalysis=true&limit=100${q}`)
+      .then((data) => {
+        setPending(data);
+      })
+      .catch(() => undefined);
   }, [pendingPage]);
 
   useEffect(() => { void loadPending(); }, [loadPending]);
@@ -298,7 +299,7 @@ export default function AiPage() {
                         </span>
                       )}
                     </div>
-                    <p className="text-sm text-foreground/80 leading-relaxed border-l-2 border-muted pl-3 italic">"{r.message}"</p>
+                    <p className="text-sm text-foreground/80 leading-relaxed border-l-2 border-muted pl-3 italic">&quot;{r.message}&quot;</p>
                     {r.explanation && (
                       <p className="text-xs text-foreground/55">{r.explanation}</p>
                     )}

@@ -52,8 +52,7 @@ export default function CalendarPage() {
   const [date, setDate] = useState(new Date());
 
   const load = useCallback(() => {
-    setLoading(true);
-    api
+    return api
       .get<Paginated<PostDetail>>('/posts?page=1&limit=100')
       .then((r) => setPosts(r.data))
       .catch(() => setPosts([]))
@@ -87,7 +86,7 @@ export default function CalendarPage() {
         subtitle="Vista mensual, semanal y diaria de todas tus publicaciones"
       >
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={load} disabled={loading}>
+          <Button variant="outline" size="sm" onClick={() => { setLoading(true); void load(); }} disabled={loading}>
             <RefreshCw className={cn('mr-1.5 size-3.5', loading && 'animate-spin')} />
             Actualizar
           </Button>

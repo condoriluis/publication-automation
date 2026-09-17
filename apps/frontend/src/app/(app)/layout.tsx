@@ -32,11 +32,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     }
   }, [isLoading, isAuthenticated, router]);
 
-  // Sin sesión: no renderizar contenido protegido mientras se redirige.
-  if (!isLoading && !isAuthenticated) return null;
-
   const closeMobile = useCallback(() => setMobileOpen(false), []);
   const toggleCollapse = useCallback(() => setCollapsed((c) => !c), []);
+
+  // Sin sesión: no renderizar contenido protegido mientras se redirige.
+  if (!isLoading && !isAuthenticated) return null;
 
   const sidebarW = collapsed ? 'lg:pl-[4.5rem]' : 'lg:pl-64';
 

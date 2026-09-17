@@ -60,11 +60,9 @@ export default function LogsPage() {
   const [loading, setLoading] = useState(false);
 
   const load = useCallback((cat: AuditLogItem['category'] | 'ALL' = 'ALL') => {
-    setLoading(true);
-    setError(null);
     const params = new URLSearchParams({ page: '1', limit: '200' });
     if (cat !== 'ALL') params.set('category', cat);
-    api
+    return api
       .get<Paginated<AuditLogItem>>(`/audit?${params.toString()}`)
       .then((res) => setData(res.data))
       .catch((e) => setError(e instanceof Error ? e.message : 'No se pudieron cargar los logs'))
@@ -72,11 +70,7 @@ export default function LogsPage() {
   }, []);
 
   useEffect(() => {
-    load();
-  }, [load]);
-
-  useEffect(() => {
-    load(category);
+    void load(category);
   }, [category, load]);
 
   const columns: ColumnDef<AuditLogItem>[] = [
@@ -148,7 +142,7 @@ export default function LogsPage() {
     <div className="space-y-6">
       <PageHeader title="Logs" subtitle="Registro de auditoría y eventos del sistema">
         <div className="flex items-center gap-2">
-          <Select value={category} onValueChange={(v) => setCategory(v as AuditLogItem['category'] | 'ALL')}>
+          <Select value={category} onValueChange={(v) => { setError(null); setLoading(true); setCategory(v as AuditLogItem['category'] | 'ALL'); }}>
             <SelectTrigger className="h-9 w-[180px]">
               <SelectValue placeholder="Categoría" />
             </SelectTrigger>
@@ -161,7 +155,7 @@ export default function LogsPage() {
               ))}
             </SelectContent>
           </Select>
-          <Button variant="outline" size="sm" onClick={() => load(category)} disabled={loading}>
+          <Button variant="outline" size="sm" onClick={() => { setError(null); setLoading(true); void load(category); }} disabled={loading}>
             <RefreshCw className={`size-4 ${loading ? 'animate-spin' : ''}`} />
             <span className="hidden sm:inline">Refrescar</span>
           </Button>
