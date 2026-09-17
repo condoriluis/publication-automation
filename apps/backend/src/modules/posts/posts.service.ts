@@ -191,8 +191,8 @@ export class PostsService {
       await this.facebook.deletePost(page.id, post.metaObjectId as string);
     }
 
-    await this.prisma.post.delete({ where: { id } });
-
+    // Registrar la auditoría ANTES de borrar: el log referencia el postId
+    // (FK) y no puede insertarse contra un post que ya no existe.
     await this.audit.record({
       action: 'post.delete',
       category: LogCategory.POST,
@@ -202,6 +202,9 @@ export class PostsService {
       postId: id,
       metadata: { removedFromFacebook: publishedOnFacebook },
     });
+
+    await this.prisma.post.delete({ where: { id } });
+
     this.logger.log(`Post ${id} eliminado${publishedOnFacebook ? ' de Facebook y de la BD' : ' de la BD'}`);
     return { success: true };
   }
