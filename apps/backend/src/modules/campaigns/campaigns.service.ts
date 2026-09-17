@@ -185,12 +185,20 @@ export class CampaignsService implements OnModuleInit {
     if (!allowedStatuses.includes(campaign.status)) {
       throw new ConflictException('Solo se pueden eliminar campañas en borrador o ya finalizadas');
     }
+
+    // Un post sin campaña ya no se publica solo: cancelar los pendientes para
+    // que no queden 'SCHEDULED' huérfanos; los publicados se conservan como historial.
+    const cancelled = await this.prisma.post.updateMany({
+      where: { campaignId: id, status: { in: [PostStatus.SCHEDULED, PostStatus.PUBLISHING, PostStatus.DRAFT] } },
+      data: { status: PostStatus.CANCELLED },
+    });
+
     await this.prisma.campaign.delete({ where: { id } });
     await this.audit.record({
       action: 'campaign.delete',
       category: LogCategory.CAMPAIGN,
       userId,
-      metadata: { campaignId: id, name: campaign.name },
+      metadata: { campaignId: id, name: campaign.name, cancelledPosts: cancelled.count },
     });
     return { success: true };
   }
