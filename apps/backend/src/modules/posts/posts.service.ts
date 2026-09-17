@@ -91,7 +91,7 @@ export class PostsService {
       this.prisma.post.findMany({
         where,
         include: {
-          page: { select: { id: true, name: true } },
+          page: { select: { id: true, name: true, pictureUrl: true } },
           campaign: { select: { id: true, name: true } },
           engagement: true,
           _count: { select: { comments: true } },
@@ -109,7 +109,7 @@ export class PostsService {
     const post = await this.prisma.post.findFirst({
       where: { id, userId },
       include: {
-        page: { select: { id: true, name: true } },
+        page: { select: { id: true, name: true, pictureUrl: true } },
         campaign: { select: { id: true, name: true } },
         engagement: true,
         _count: { select: { comments: true } },

@@ -53,8 +53,12 @@ function PostPreview({ post }: { post: PostListRow }) {
     <div className={`rounded-xl border bg-card p-3.5 transition-all ${isPublished ? 'border-emerald-500/40 bg-emerald-500/5' : isFailed ? 'border-destructive/30 bg-destructive/5' : 'border-border'}`}>
       <div className="flex items-start gap-3">
         {/* Avatar */}
-        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#1877F2] text-[10px] font-bold text-white">
-          {pageName.slice(0, 2).toUpperCase()}
+        <div className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#1877F2] text-[10px] font-bold text-white">
+          {post.page?.pictureUrl ? (
+            <img src={post.page.pictureUrl} alt="" className="size-full object-cover" />
+          ) : (
+            pageName.slice(0, 2).toUpperCase()
+          )}
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">

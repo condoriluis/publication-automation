@@ -239,7 +239,7 @@ export interface PostDetail {
   aiGenerated: boolean;
   aiProvider: string | null;
   statusChangedAt: string;
-  page: { id: string; name: string };
+  page: { id: string; name: string; pictureUrl: string | null };
   campaign: { id: string; name: string } | null;
   engagement: EngagementMetric | null;
   _count: { comments: number };
@@ -259,7 +259,7 @@ export interface PostListRow {
   metaPermalinkUrl: string | null;
   aiGenerated: boolean;
   statusChangedAt: string;
-  page: { id: string; name: string };
+  page: { id: string; name: string; pictureUrl: string | null };
   campaign: { id: string; name: string } | null;
   engagement: EngagementMetric | null;
   _count: { comments: number };

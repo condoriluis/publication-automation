@@ -104,6 +104,7 @@ export default function PostDetailPage() {
           {/* Post preview styled as Facebook */}
           <FacebookPostPreview
             pageName={post.page?.name ?? 'Página'}
+            pagePicture={post.page?.pictureUrl ?? null}
             content={post.content}
             imageUrls={post.imageUrls}
             videoUrl={post.videoUrl}
