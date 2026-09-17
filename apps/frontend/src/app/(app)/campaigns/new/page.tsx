@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
-import { Plus, Trash2, Loader2, Sparkles } from 'lucide-react';
+import { Plus, Trash2, Loader2, Sparkles, CircleHelp } from 'lucide-react';
 
 import { api } from '@/lib/api';
 import type { Campaign, CampaignGroupInput, Paginated, PageListRow } from '@/lib/types';
@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { DateTimePicker } from '@/components/ui/date-time-picker';
 import { EmptyState } from '@/components/empty-state';
 import { FacebookPostPreview } from '@/components/facebook-post-preview';
@@ -173,6 +174,23 @@ function NewCampaignContent() {
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">Escribe de qué trata y dale a Autocompletar para que la IA llene el resto.</p>
               </div>
+              <div className="flex items-center space-x-2 sm:col-span-2 mt-2">
+                <Checkbox id="aiGenerated" checked={form.aiGenerated} onCheckedChange={(checked) => setForm({ ...form, aiGenerated: checked === true })} />
+                <Label htmlFor="aiGenerated" className="text-sm font-normal cursor-pointer">
+                  Contenido generado por IA
+                </Label>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button type="button" aria-label="Qué hace Contenido generado por IA" className="rounded-full p-1 text-foreground/40 transition-colors hover:text-[#1877F2]">
+                      <CircleHelp className="size-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">
+                    <p><strong className="text-background/80 font-semibold">Activado:</strong> la IA reescribe y varía cada post (usa tu Título y Contenido base como tema). Ideal para publicar 5, 10, 100 posts sin que parezcan copias.</p>
+                    <p className="mt-1"><strong className="text-background/80 font-semibold">Desactivado:</strong> cada post de la campaña se publica exactamente con el Contenido base que escribiste (texto idéntico en todos).</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
               <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor="desc">Descripción (opcional)</Label>
                 <Textarea id="desc" rows={2} maxLength={500} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
@@ -223,12 +241,6 @@ function NewCampaignContent() {
               <Field label="Fin (opcional)">
                 <DateTimePicker value={form.endsAt} onChange={(val) => setForm({ ...form, endsAt: val })} />
               </Field>
-              <div className="flex items-center space-x-2 sm:col-span-2 mt-2">
-                <Checkbox id="aiGenerated" checked={form.aiGenerated} onCheckedChange={(checked) => setForm({ ...form, aiGenerated: checked === true })} />
-                <Label htmlFor="aiGenerated" className="text-sm font-normal cursor-pointer">
-                  Contenido generado por IA
-                </Label>
-              </div>
             </CardContent>
           </Card>
 

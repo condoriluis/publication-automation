@@ -4,6 +4,7 @@ import { Toaster } from 'sonner';
 
 import { cn } from '@/lib/utils';
 import { LayoutProvider } from '@/components/layout-provider';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import '@/app/globals.css';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 
@@ -33,7 +34,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="es" suppressHydrationWarning className={inter.variable}>
       <body className={cn('min-h-screen bg-background font-sans antialiased')}>
-        <LayoutProvider>{children}</LayoutProvider>
+        <LayoutProvider>
+          <TooltipProvider delayDuration={100}>{children}</TooltipProvider>
+        </LayoutProvider>
         <Toaster
           position="top-right"
           richColors
