@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { EmptyState } from '@/components/empty-state';
 import { LoadingRows, Pagination } from '@/components/pagination';
+import { Message } from '@/components/ui/message';
 import { formatRelative } from '@/lib/utils';
 
 const RISKS: (RiskLevel | '')[] = ['', 'NONE', 'LOW', 'MEDIUM', 'HIGH'];
@@ -42,6 +43,14 @@ const RISK_LABELS: Record<RiskLevel, { label: string; className: string }> = {
   MEDIUM: { label: 'Riesgo medio', className: '!bg-orange-500/10 !text-orange-600 dark:!text-orange-400' },
   HIGH: { label: 'Riesgo alto', className: '!bg-destructive/10 !text-destructive' },
 };
+
+function Chip({ className, title, children }: { className?: string; title?: string; children: React.ReactNode }) {
+  return (
+    <span title={title} className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${className ?? ''}`}>
+      {children}
+    </span>
+  );
+}
 
 export default function CommentsPage() {
   return (
@@ -173,46 +182,65 @@ function CommentsContent() {
         <Card>
           <ul className="divide-y">
             {data.data.map((c) => (
-              <li key={c.id} className="flex flex-col gap-2 p-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                    {(c.fromName ?? '?').slice(0, 2).toUpperCase()}
-                  </div>
-                  <span className="text-sm font-medium">{c.fromName ?? 'Anónimo'}</span>
-                  <span className="text-xs text-foreground/50">·</span>
-                  <span className="text-xs text-foreground/50">{formatRelative(c.createdAt)}</span>
-                  <div className="ml-auto flex flex-wrap items-center gap-1.5">
-                    {c.classification ? (
-                      <span title={`Confianza: ${c.confidence ?? 'n/d'}%`} className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${CLASSIFICATION_LABELS[c.classification].className}`}>
-                        {CLASSIFICATION_LABELS[c.classification].label}
-                        {typeof c.confidence === 'number' && <span className="ml-1 font-mono text-[9px] opacity-60">{c.confidence}%</span>}
-                      </span>
-                    ) : null}
-                    {STATUS_LABELS[c.status] ? (
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_LABELS[c.status].className}`}>
-                        {STATUS_LABELS[c.status].label}
-                      </span>
-                    ) : null}
-                    {RISK_LABELS[c.riskLevel] ? (
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${RISK_LABELS[c.riskLevel].className}`}>
-                        {RISK_LABELS[c.riskLevel].label}
-                      </span>
-                    ) : null}
-                    {c.needsReview && (
-                      <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
-                        Revisar
-                      </span>
-                    )}
-                  </div>
+              <li key={c.id} className="flex flex-col gap-3 p-4">
+                {/* Conversación: comentario del seguidor + respuestas de la página */}
+                <div className="space-y-2">
+                  <Message variant="incoming" author={c.fromName ?? 'Anónimo'} time={formatRelative(c.createdAt)}>
+                    {c.message || <span className="italic text-foreground/40">(sin texto)</span>}
+                  </Message>
+                  {c.replies.map((r) => (
+                    <Message
+                      key={r.id}
+                      variant={r.isFromPage ? 'outgoing' : 'incoming'}
+                      author={r.fromName ?? (r.isFromPage ? 'Nuestra página' : 'Anónimo')}
+                      time={formatRelative(r.createdAt)}
+                      label={r.isFromPage ? 'Página' : undefined}
+                    >
+                      {r.message || '(sin texto)'}
+                    </Message>
+                  ))}
                 </div>
-                <p className="break-words whitespace-pre-wrap text-sm leading-relaxed">{c.message || <span className="text-foreground/40">(sin texto)</span>}</p>
-                <p className="flex flex-wrap items-center gap-1.5 text-xs text-foreground/50">
-                  <span className="font-medium text-foreground/70">{c.page?.name ?? 'Página'}</span>
+
+                {/* Contexto: página y publicación de origen */}
+                <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-foreground/50">
+                  <span className="font-medium text-foreground/80">{c.page?.name ?? 'Página'}</span>
                   <span>·</span>
                   <Link href={`/posts/${c.post?.id}`} className="min-w-0 truncate text-[#1877F2] hover:underline">
                     {c.post?.content.slice(0, 60) ?? 'Ver publicación'}
                   </Link>
-                </p>
+                </div>
+
+                {/* Metadatos: estado, riesgo y clasificación */}
+                <div className="flex flex-wrap items-center gap-1.5 border-t border-border/60 pt-3">
+                  {STATUS_LABELS[c.status] ? (
+                    <Chip className={STATUS_LABELS[c.status].className}>{STATUS_LABELS[c.status].label}</Chip>
+                  ) : null}
+                  {RISK_LABELS[c.riskLevel] ? (
+                    <Chip className={RISK_LABELS[c.riskLevel].className}>{RISK_LABELS[c.riskLevel].label}</Chip>
+                  ) : null}
+                  {c.classification ? (
+                    <Chip
+                      title={`Confianza: ${c.confidence ?? 'n/d'}%`}
+                      className={CLASSIFICATION_LABELS[c.classification].className}
+                    >
+                      {CLASSIFICATION_LABELS[c.classification].label}
+                      {typeof c.confidence === 'number' && (
+                        <span className="ml-1 font-mono text-[9px] opacity-60">{c.confidence}%</span>
+                      )}
+                    </Chip>
+                  ) : null}
+                  {c.needsReview && (
+                    <Chip className="!bg-amber-500/10 !text-amber-600 dark:!text-amber-400">Revisar</Chip>
+                  )}
+                  {c.replies.length > 0 ? (
+                    <Chip className="!bg-muted !text-foreground/60">
+                      <MessageSquareOff className="mr-1 size-3" />
+                      {c.replies.length} respuesta{c.replies.length > 1 ? 's' : ''}
+                    </Chip>
+                  ) : null}
+                </div>
+
+                {/* Acciones */}
                 <div className="flex flex-wrap gap-1.5">
                   <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => { setReplyId(replyId === c.id ? null : c.id); setReplyText(''); }}>
                     <Reply className="size-3.5" /> Responder
@@ -235,33 +263,8 @@ function CommentsContent() {
                   <Button size="sm" variant="outline" className="text-destructive" disabled={busy !== null} onClick={() => void act(c.id, 'moderate', { action: 'delete' })}>
                     <Trash2 className="size-3.5" /> Eliminar
                   </Button>
-                  {c.replies.length > 0 ? (
-                    <span className="ml-auto flex items-center gap-1 text-xs text-foreground/50">
-                      <MessageSquareOff className="size-3.5" /> {c.replies.length} respuesta{c.replies.length > 1 ? 's' : ''}
-                    </span>
-                  ) : null}
                 </div>
-                {c.replies.length > 0 ? (
-                  <div className="space-y-2 rounded-lg bg-muted/40 p-3">
-                    <p className="text-[10px] font-medium uppercase tracking-wide text-foreground/40">Respuestas</p>
-                    {c.replies.map((r) => (
-                      <div key={r.id} className="flex items-start gap-2">
-                        <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-[#1877F2]/10 text-[10px] font-bold text-[#1877F2]">
-                          {(r.fromName ?? 'P').slice(0, 1).toUpperCase()}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <span className="text-xs font-semibold">{r.fromName ?? 'Página'}</span>
-                          {r.isFromPage && (
-                            <span className="ml-1.5 rounded bg-[#1877F2]/10 px-1.5 py-0.5 text-[10px] font-medium text-[#1877F2]">
-                              Página
-                            </span>
-                          )}
-                          <p className="break-words text-xs text-foreground/70">{r.message || '(sin texto)'}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
+
                 {replyId === c.id ? (
                   <div className="flex gap-2">
                     <Textarea value={replyText} onChange={(e) => setReplyText(e.target.value)} placeholder="Escribe tu respuesta…" rows={2} className="flex-1" />
