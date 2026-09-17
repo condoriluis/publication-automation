@@ -10,6 +10,7 @@ import {
 
 import { AppLogger } from '../common/logger/app-logger.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { recordSentReply } from '../modules/comments/comment-reply.helper';
 import { FacebookService, FacebookGraphError } from '../modules/facebook/facebook.service';
 import { AiService } from '../modules/ai/ai.service';
 import { AuditService } from '../modules/audit/audit.service';
@@ -135,6 +136,14 @@ export class CampaignExecutorService {
     await this.prisma.comment.update({
       where: { id: commentId },
       data: { status: CommentStatus.RESPONDED },
+    });
+    await recordSentReply(this.prisma, {
+      metaCommentId: result.id,
+      parentId: comment.id,
+      pageId: comment.pageId,
+      postId: comment.postId,
+      pageName: page?.name ?? 'Página',
+      message: finalMessage,
     });
     const action = await this.prisma.commentAction.create({
       data: {

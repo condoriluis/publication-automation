@@ -103,7 +103,7 @@ export class WebhooksService {
   private async processEntry(entry: MetaEntry): Promise<void> {
     const page = await this.prisma.page.findFirst({
       where: { facebookPageId: entry.id },
-      select: { id: true, name: true },
+      select: { id: true, name: true, facebookPageId: true },
     });
     if (!page) {
       this.logger.warn(`Webhook de página no registrada: ${entry.id}`, 'WebhooksService');
@@ -129,7 +129,10 @@ export class WebhooksService {
     }
   }
 
-  private async processCommentEvent(value: Record<string, unknown>, page: { id: string; name: string }): Promise<void> {
+  private async processCommentEvent(
+    value: Record<string, unknown>,
+    page: { id: string; name: string; facebookPageId: string },
+  ): Promise<void> {
     const v = value as MetaChangeValue;
     const metaCommentId = (v.comment_id ?? v.id) !== undefined ? String(v.comment_id ?? v.id) : '';
     const verb = typeof v.verb === 'string' ? v.verb.toLowerCase() : '';
@@ -217,7 +220,7 @@ export class WebhooksService {
   private async ensureRecord(
     metaCommentId: string,
     value: Record<string, unknown>,
-    page: { id: string; name: string },
+    page: { id: string; name: string; facebookPageId: string },
     opts: { hidden?: boolean },
   ): Promise<MetaPostRef | null> {
     const v = value as MetaChangeValue;
@@ -234,7 +237,7 @@ export class WebhooksService {
   private async createWithAutomation(
     metaCommentId: string,
     value: Record<string, unknown>,
-    page: { id: string; name: string },
+    page: { id: string; name: string; facebookPageId: string },
     opts: { fromUserId?: string; fromName?: string; createdAt?: Date; hidden?: boolean } = {},
   ): Promise<{ id: string; created: boolean } | null> {
     const v = value as MetaChangeValue;
@@ -258,6 +261,7 @@ export class WebhooksService {
     }
 
     const message = typeof v.message === 'string' ? v.message : '';
+    const isFromPage = opts.fromUserId !== undefined && opts.fromUserId === page.facebookPageId;
     const result = await this.commentsService.createIncomingComment({
       metaCommentId,
       pageId: page.id,
@@ -266,6 +270,7 @@ export class WebhooksService {
       fromUserId: opts.fromUserId,
       fromName: opts.fromName,
       message,
+      isFromPage,
       isHidden: opts.hidden ?? v.is_hidden === true,
       createdAt: opts.createdAt,
     });

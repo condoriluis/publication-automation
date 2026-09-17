@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
@@ -52,9 +52,6 @@ function Chip({ className, title, children }: { className?: string; title?: stri
     </span>
   );
 }
-
-const needsModeration = (c: CommentDetail): boolean =>
-  c.status === 'VISIBLE' && (c.riskLevel === 'MEDIUM' || c.riskLevel === 'HIGH' || c.needsReview);
 
 function AuthorCell({ comment }: { comment: CommentDetail }) {
   return (
@@ -142,7 +139,10 @@ function CommentsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const postId = searchParams.get('postId');
-  const [all, setAll] = useState<CommentDetail[] | null>(null);
+  const [res, setRes] = useState<Paginated<CommentDetail> | null>(null);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [search, setSearch] = useState('');
   const [risk, setRisk] = useState('');
   const [status, setStatus] = useState('');
   const [classification, setClassification] = useState('');
@@ -154,28 +154,51 @@ function CommentsContent() {
   const [error, setError] = useState<string | null>(null);
   const [suggesting, setSuggesting] = useState<string | null>(null);
 
+  const buildQuery = useCallback(() => {
+    const params = new URLSearchParams();
+    params.set('page', String(page));
+    params.set('limit', String(limit));
+    if (risk) params.set('riskLevel', risk);
+    if (status) params.set('status', status);
+    if (classification) params.set('classification', classification);
+    if (onlyReview) params.set('needsReview', 'true');
+    if (onlyModeration) params.set('needsModeration', 'true');
+    if (search.trim()) params.set('search', search.trim());
+    if (postId) params.set('postId', postId);
+    return `/comments?${params.toString()}`;
+  }, [page, limit, risk, status, classification, onlyModeration, onlyReview, search, postId]);
+
   const load = useCallback(() => {
     api
-      .get<Paginated<CommentDetail>>(`/comments?page=1&limit=100${postId ? `&postId=${postId}` : ''}`)
-      .then((res) => setAll(res.data))
+      .get<Paginated<CommentDetail>>(buildQuery())
+      .then(setRes)
       .catch((e) => setError(e instanceof Error ? e.message : 'No se pudieron cargar los comentarios'));
-  }, [postId]);
+  }, [buildQuery]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  const filtered = useMemo(() => {
-    if (!all) return [];
-    return all.filter((c) => {
-      if (risk && c.riskLevel !== risk) return false;
-      if (status && c.status !== status) return false;
-      if (classification && c.classification !== classification) return false;
-      if (onlyReview && !c.needsReview) return false;
-      if (onlyModeration && !needsModeration(c)) return false;
-      return true;
-    });
-  }, [all, risk, status, classification, onlyModeration, onlyReview]);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (searchTimer.current) clearTimeout(searchTimer.current);
+    },
+    [],
+  );
+
+  const onSearchChange = useCallback((value: string) => {
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => {
+      setSearch(value);
+      setPage(1);
+    }, 350);
+  }, []);
+
+  const onPaginationChange = useCallback((pageIndex: number, pageSize: number) => {
+    setPage(pageIndex + 1);
+    setLimit(pageSize);
+  }, []);
 
   const act = useCallback(
     async (id: string, actName: string, body?: unknown) => {
@@ -233,7 +256,7 @@ function CommentsContent() {
     const c = row.original;
     return (
       <div className="flex flex-col gap-3 p-4">
-        {/* Conversación: comentario del seguidor + respuestas de la página */}
+        {/* Conversación: comentario del seguidor + respuestas (de usuarios o la página) */}
         <div className="space-y-2">
           <Message variant="incoming" author={c.fromName ?? 'Anónimo'} time={formatRelative(c.createdAt)}>
             {c.message || <span className="italic text-foreground/40">(sin texto)</span>}
@@ -334,20 +357,20 @@ function CommentsContent() {
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="mr-1 text-xs font-medium text-foreground/50">Riesgo:</span>
         {RISKS.map((r, i) => (
-          <Button key={r || `r${i}`} size="sm" variant={risk === r ? 'default' : 'outline'} onClick={() => setRisk(r)}>{r || 'Todos'}</Button>
+          <Button key={r || `r${i}`} size="sm" variant={risk === r ? 'default' : 'outline'} onClick={() => { setRisk(r); setPage(1); }}>{r || 'Todos'}</Button>
         ))}
         <span className="ml-2 mr-1 text-xs font-medium text-foreground/50">Estado:</span>
         {STATUSES.map((s, i) => (
-          <Button key={s || `s${i}`} size="sm" variant={status === s ? 'default' : 'outline'} onClick={() => setStatus(s)}>{s || 'Todos'}</Button>
+          <Button key={s || `s${i}`} size="sm" variant={status === s ? 'default' : 'outline'} onClick={() => { setStatus(s); setPage(1); }}>{s || 'Todos'}</Button>
         ))}
         <span className="ml-2 mr-1 text-xs font-medium text-foreground/50">Clasificación:</span>
         {CLASSIFICATIONS.map((cl, i) => (
-          <Button key={cl || `cl${i}`} size="sm" variant={classification === cl ? 'default' : 'outline'} onClick={() => setClassification(cl)}>{cl || 'Todas'}</Button>
+          <Button key={cl || `cl${i}`} size="sm" variant={classification === cl ? 'default' : 'outline'} onClick={() => { setClassification(cl); setPage(1); }}>{cl || 'Todas'}</Button>
         ))}
-        <Button size="sm" variant={onlyModeration ? 'default' : 'outline'} onClick={() => setOnlyModeration(!onlyModeration)}>
+        <Button size="sm" variant={onlyModeration ? 'default' : 'outline'} onClick={() => { setOnlyModeration(!onlyModeration); setPage(1); }}>
           Solo moderación
         </Button>
-        <Button size="sm" variant={onlyReview ? 'default' : 'outline'} onClick={() => setOnlyReview(!onlyReview)}>
+        <Button size="sm" variant={onlyReview ? 'default' : 'outline'} onClick={() => { setOnlyReview(!onlyReview); setPage(1); }}>
           Solo revisión
         </Button>
         {postId ? (
@@ -365,14 +388,18 @@ function CommentsContent() {
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
-      {all === null && !error ? (
+      {res === null && !error ? (
         <LoadingRows />
-      ) : all && all.length === 0 ? (
+      ) : res && res.meta.total === 0 ? (
         <EmptyState title="Sin comentarios" description="Sincroniza comentarios desde el detalle de una publicación." />
       ) : (
         <DataTable<CommentDetail, unknown>
           columns={columns}
-          data={filtered}
+          data={res?.data ?? []}
+          manualPagination
+          rowCount={res?.meta.total ?? 0}
+          onPaginationChange={onPaginationChange}
+          onSearchChange={onSearchChange}
           getRowCanExpand={() => true}
           renderSubComponent={renderDetail}
         />

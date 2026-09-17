@@ -4,6 +4,7 @@ import { Comment, CommentActionType, CommentStatus, LogCategory, Prisma } from '
 import { AppLogger } from '../../common/logger/app-logger.service';
 import { Paginated, PaginationHelper } from '../../common/pagination/pagination.helper';
 import { PrismaService } from '../../prisma/prisma.service';
+import { recordSentReply } from './comment-reply.helper';
 import { FacebookService } from '../facebook/facebook.service';
 import { AiService, AiUnavailableError } from '../ai/ai.service';
 import { CampaignExecutorService } from '../../workers/campaign-executor.service';
@@ -39,8 +40,13 @@ export class CommentsService {
 
   async findAll(userId: string, query: CommentFilterDto): Promise<Paginated<CommentDetail>> {
     const opts = this.pagination.parsePageOptions(query as unknown as Record<string, unknown> | undefined);
+    // Bandeja de moderación: solo hilos reales (comentarios de usuario de primer
+    // nivel). Las respuestas (de usuarios o de la página) viven anidadas en el
+    // detalle, evitando filas sueltas y duplicadas en la cola.
     const where: Prisma.CommentWhereInput = {
       page: { userId },
+      parentId: null,
+      isFromPage: false,
       ...(query.postId ? { postId: query.postId } : {}),
       ...(query.pageId ? { pageId: query.pageId } : {}),
       ...(query.riskLevel ? { riskLevel: query.riskLevel } : {}),
@@ -48,13 +54,16 @@ export class CommentsService {
       ...(query.classification ? { classification: query.classification } : {}),
       ...(query.needsReview ? { needsReview: query.needsReview === 'true' } : {}),
       ...(query.needsAnalysis
-        ? { status: CommentStatus.VISIBLE, analyzedAt: null, isFromPage: false }
+        ? { status: CommentStatus.VISIBLE, analyzedAt: null }
         : {}),
       ...(query.needsModeration === 'true'
         ? {
             status: CommentStatus.VISIBLE,
             OR: [{ riskLevel: { in: ['MEDIUM', 'HIGH'] } }, { needsReview: true }],
           }
+        : {}),
+      ...(query.search
+        ? { message: { contains: query.search, mode: 'insensitive' as const } }
         : {}),
     };
 
@@ -137,16 +146,23 @@ export class CommentsService {
     let after: string | undefined;
     const newCommentIds: string[] = [];
 
+    const pageMeta = await this.prisma.page.findUnique({
+      where: { id: pageId },
+      select: { facebookPageId: true },
+    });
+
     do {
       const page = await this.facebook.getPostComments(metaObjectId, pageId, { limit: 100, after });
       for (const meta of page.data ?? []) {
+        const fromUserId = meta.from?.id ? String(meta.from.id) : null;
         const data = {
           pageId,
           metaCommentId: meta.id,
-          fromUserId: meta.from?.id ?? null,
+          fromUserId,
           fromName: meta.from?.name ?? null,
           parentId: meta.parent?.id ? await this.findOrCreateParentId(meta.parent.id, meta.id, post) : null,
           message: meta.message ?? '',
+          isFromPage: fromUserId !== null && fromUserId === pageMeta?.facebookPageId,
           isHidden: meta.is_hidden ?? false,
           status:
             meta.is_hidden === true ? CommentStatus.HIDDEN : CommentStatus.VISIBLE,
@@ -185,6 +201,10 @@ export class CommentsService {
 
   async reply(userId: string, id: string, dto: ReplyCommentDto): Promise<CommentDetail> {
     const comment = await this.requireComment(userId, id);
+    const page = await this.prisma.page.findUnique({
+      where: { id: comment.pageId },
+      select: { name: true },
+    });
     const result = await this.facebook.replyToComment(comment.metaCommentId, comment.pageId, dto.message);
 
     await this.prisma.commentAction.create({
@@ -196,6 +216,18 @@ export class CommentsService {
         performedByUserId: userId,
       },
     });
+
+    // Materializa la respuesta (comentario de la página) anidada a este
+    // comentario para que la conversación la muestre al instante, sin duplicar.
+    await recordSentReply(this.prisma, {
+      metaCommentId: result.id,
+      parentId: comment.id,
+      pageId: comment.pageId,
+      postId: comment.postId,
+      pageName: page?.name ?? 'Página',
+      message: dto.message,
+    });
+
     const updated = await this.prisma.comment.update({
       where: { id },
       data: { status: CommentStatus.RESPONDED },
@@ -314,6 +346,7 @@ export class CommentsService {
     fromName?: string;
     message: string;
     isHidden?: boolean;
+    isFromPage?: boolean;
     createdAt?: Date;
   }): Promise<{ comment: Comment; created: boolean } | null> {
     if (!input.metaCommentId) return null;
@@ -329,7 +362,7 @@ export class CommentsService {
         fromName: input.fromName ?? null,
         message: input.message,
         isHidden: input.isHidden ?? false,
-        isFromPage: false,
+        isFromPage: input.isFromPage ?? false,
         status: input.isHidden ? CommentStatus.HIDDEN : CommentStatus.VISIBLE,
         ...(input.createdAt ? { createdAt: input.createdAt } : {}),
       },

@@ -10,6 +10,7 @@ import {
   getPaginationRowModel,
   getFilteredRowModel,
   getSortedRowModel,
+  type PaginationState,
   type Row,
   type SortingState,
   useReactTable,
@@ -37,6 +38,17 @@ interface DataTableProps<TData, TValue> {
   getRowCanExpand?: (row: Row<TData>) => boolean;
   /** Contenido extra que se muestra debajo de la fila al expandirla. */
   renderSubComponent?: (props: { row: Row<TData> }) => React.ReactNode;
+  /**
+   * Modo remoto: la paginación y la búsqueda las sirve el backend. El
+   * componente muestra la página actual y avisa al padre de los cambios.
+   */
+  manualPagination?: boolean;
+  /** Total de filas en el servidor (para la paginación remota). */
+  rowCount?: number;
+  /** Se dispara al cambiar de página o tamaño de página (índice 0-based). */
+  onPaginationChange?: (pageIndex: number, pageSize: number) => void;
+  /** Se dispara al escribir en el buscador (modo remoto). */
+  onSearchChange?: (value: string) => void;
 }
 
 const expanderColumn: ColumnDef<unknown, unknown> = {
@@ -62,10 +74,17 @@ export function DataTable<TData, TValue>({
   loading,
   getRowCanExpand,
   renderSubComponent,
+  manualPagination,
+  rowCount,
+  onPaginationChange,
+  onSearchChange,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = React.useState('');
   const [expanded, setExpanded] = React.useState<ExpandedState>({});
+  const [pagination, setPagination] = React.useState<PaginationState>({ pageIndex: 0, pageSize: 10 });
+
+  const isRemote = manualPagination === true;
 
   const mergedColumns = React.useMemo<ColumnDef<TData, TValue>[]>(
     () => (renderSubComponent ? ([expanderColumn, ...columns] as ColumnDef<TData, TValue>[]) : columns),
@@ -75,24 +94,32 @@ export function DataTable<TData, TValue>({
   const table = useReactTable({
     data,
     columns: mergedColumns,
-    state: { sorting, globalFilter, expanded },
+    state: { sorting, globalFilter, expanded, pagination },
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
     onExpandedChange: setExpanded,
+    onPaginationChange: (updater) => {
+      const next = typeof updater === 'function' ? updater(pagination) : updater;
+      const reset = next.pageSize !== pagination.pageSize;
+      const resolved = reset ? { ...next, pageIndex: 0 } : next;
+      setPagination(resolved);
+      if (isRemote) onPaginationChange?.(resolved.pageIndex, resolved.pageSize);
+    },
     getRowCanExpand,
     getCoreRowModel: getCoreRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: isRemote ? undefined : getFilteredRowModel(),
+    getSortedRowModel: isRemote ? undefined : getSortedRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     getExpandedRowModel: getExpandedRowModel(),
-    initialState: { pagination: { pageSize: 10 } },
+    ...(isRemote
+      ? { pageCount: Math.max(1, Math.ceil((rowCount ?? 0) / pagination.pageSize)), rowCount }
+      : {}),
   });
 
-  const firstRowIndex = table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1;
-  const lastRowIndex = Math.min(
-    (table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize,
-    table.getFilteredRowModel().rows.length
-  );
+  const totalRows = isRemote ? rowCount ?? 0 : table.getFilteredRowModel().rows.length;
+  const { pageIndex, pageSize } = table.getState().pagination;
+  const firstRowIndex = totalRows === 0 ? 0 : pageIndex * pageSize + 1;
+  const lastRowIndex = Math.min((pageIndex + 1) * pageSize, totalRows);
 
   return (
     <div className="space-y-4">
@@ -102,12 +129,18 @@ export function DataTable<TData, TValue>({
           <Input
             placeholder="Buscar..."
             value={globalFilter ?? ''}
-            onChange={(e) => setGlobalFilter(e.target.value)}
+            onChange={(e) => {
+              setGlobalFilter(e.target.value);
+              if (isRemote) onSearchChange?.(e.target.value);
+            }}
             className="pr-8"
           />
           {globalFilter && (
             <button
-              onClick={() => setGlobalFilter('')}
+              onClick={() => {
+                setGlobalFilter('');
+                if (isRemote) onSearchChange?.('');
+              }}
               className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
             >
               ✕
@@ -145,8 +178,8 @@ export function DataTable<TData, TValue>({
                 {headerGroup.headers.map((header) => (
                   <TableHead
                     key={header.id}
-                    onClick={header.column.getToggleSortingHandler()}
-                    className={header.column.getCanSort() ? 'cursor-pointer select-none' : ''}
+                    onClick={!isRemote && header.column.getCanSort() ? header.column.getToggleSortingHandler() : undefined}
+                    className={!isRemote && header.column.getCanSort() ? 'cursor-pointer select-none' : ''}
                   >
                     <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-[var(--muted-foreground)]">
                       {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
@@ -201,8 +234,7 @@ export function DataTable<TData, TValue>({
       {/* 🔎 Paginación */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <span className="text-xs text-[var(--muted-foreground)] sm:text-sm">
-          Mostrando {table.getFilteredRowModel().rows.length > 0 ? firstRowIndex : 0} -{' '}
-          {table.getFilteredRowModel().rows.length > 0 ? lastRowIndex : 0} de {table.getFilteredRowModel().rows.length}
+          Mostrando {totalRows > 0 ? firstRowIndex : 0} - {totalRows > 0 ? lastRowIndex : 0} de {totalRows}
         </span>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">

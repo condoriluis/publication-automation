@@ -4,6 +4,7 @@ import { CommentActionType, CommentStatus, LogCategory, Prisma } from '@prisma/c
 
 import { AppLogger } from '../../common/logger/app-logger.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { recordSentReply } from './comment-reply.helper';
 import { FacebookService } from '../facebook/facebook.service';
 import { AuditService } from '../audit/audit.service';
 import { CommentAutomationService } from './comment-automation.service';
@@ -99,6 +100,7 @@ export class CommentWorkerService {
         comment: {
           include: {
             post: { select: { id: true, content: true, metaPermalinkUrl: true } },
+            page: { select: { name: true } },
           },
         },
       },
@@ -139,7 +141,15 @@ export class CommentWorkerService {
     id: string;
     commentId: string;
     payload: unknown;
-    comment: { id: string; metaCommentId: string; pageId: string; postId: string; fromName: string | null; post: { id: string; content: string } };
+    comment: {
+      id: string;
+      metaCommentId: string;
+      pageId: string;
+      postId: string;
+      fromName: string | null;
+      post: { id: string; content: string };
+      page: { name: string } | null;
+    };
   }): Promise<void> {
     const payload = (action.payload ?? {}) as { message?: string };
     const message = payload.message;
@@ -150,6 +160,14 @@ export class CommentWorkerService {
     await this.prisma.comment.update({
       where: { id: action.commentId },
       data: { status: CommentStatus.RESPONDED },
+    });
+    await recordSentReply(this.prisma, {
+      metaCommentId: result.id,
+      parentId: action.commentId,
+      pageId: action.comment.pageId,
+      postId: action.comment.postId,
+      pageName: action.comment.page?.name ?? 'Página',
+      message,
     });
 
     await this.markSuccess(action.id, result);

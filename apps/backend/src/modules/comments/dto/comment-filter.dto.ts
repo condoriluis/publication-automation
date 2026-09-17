@@ -43,6 +43,11 @@ export class CommentFilterDto extends PaginationQueryDto {
   @IsString()
   needsModeration?: 'true' | 'false';
 
+  @ApiPropertyOptional({ description: 'Buscar por texto del comentario' })
+  @IsOptional()
+  @IsString()
+  search?: string;
+
   @ApiPropertyOptional({ description: 'Solo comentarios pendientes de análisis IA (sin clasificar)' })
   @IsOptional()
   @IsString()
