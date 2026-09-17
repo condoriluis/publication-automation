@@ -22,7 +22,9 @@ import { CommentsService } from './comments.service';
  *   metaCommentId); los comentarios nuevos pasan por la automatización.
  * - Pausa breve entre páginas para no golpear el rate limit de Meta y
  *   aisla cada página: un fallo no cancela el resto del ciclo.
- * - Registra un rastro de auditoría `comment.poll` por página.
+ * - Registra auditoría `comment.poll` únicamente cuando hay novedades
+ *   (comentarios nuevos o ya respondidos); los ciclos vacíos solo escriben
+ *   un log de depuración (no persiste en BD), para no llenar la tabla de logs.
  */
 @Injectable()
 export class CommentPollWorkerService implements OnModuleInit, OnModuleDestroy {
@@ -88,6 +90,7 @@ export class CommentPollWorkerService implements OnModuleInit, OnModuleDestroy {
           take: this.appConfig.commentPollMaxPosts,
           select: { id: true, pageId: true, metaObjectId: true },
         });
+        if (posts.length === 0) continue;
 
         let synced = 0;
         let skipped = 0;
@@ -102,15 +105,19 @@ export class CommentPollWorkerService implements OnModuleInit, OnModuleDestroy {
             `Sondeo "${page.name}": ${synced} nuevos, ${skipped} ya respondidos (${posts.length} posts)`,
             'CommentPoll',
           );
+          await this.audit.record({
+            action: 'comment.poll',
+            category: LogCategory.COMMENT,
+            userId: page.userId,
+            pageId: page.id,
+            metadata: { posts: posts.length, synced, skipped },
+          });
+        } else {
+          this.logger.debug(
+            `Sondeo "${page.name}": sin novedades (${posts.length} posts)`,
+            'CommentPoll',
+          );
         }
-
-        await this.audit.record({
-          action: 'comment.poll',
-          category: LogCategory.COMMENT,
-          userId: page.userId,
-          pageId: page.id,
-          metadata: { posts: posts.length, synced, skipped },
-        });
 
         await this.sleep(this.appConfig.commentPollPageDelayMs);
       } catch (err) {
