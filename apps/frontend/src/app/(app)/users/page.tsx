@@ -148,7 +148,7 @@ export default function UsersPage() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{u.displayName}</p>
-                  <p className="text-xs text-foreground/50">{u.email} · creado {formatDate(u.createdAt, { dateStyle: 'medium' })}</p>
+                  <p className="truncate text-xs text-foreground/50">{u.email} · creado {formatDate(u.createdAt, { dateStyle: 'medium' })}</p>
                 </div>
                 <div className="flex items-center gap-1.5">
                   {u.roles.map((r) => <StatusBadge key={r} value={r} />)}

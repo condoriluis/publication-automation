@@ -275,7 +275,7 @@ export default function CampaignDetailPage() {
               </div>
 
               {/* Stats */}
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 min-[420px]:grid-cols-3 gap-2">
                 <StatCard label="Publicados" value={publishedCount} icon={<CheckCircle2 className="size-4 text-emerald-500" />} color="emerald" />
                 <StatCard label="Fallidos" value={failedCount} icon={<XCircle className="size-4 text-destructive" />} color="red" />
                 <StatCard label="Pendientes" value={pendingCount} icon={<Clock className="size-4 text-foreground/40" />} color="neutral" />
@@ -308,7 +308,7 @@ export default function CampaignDetailPage() {
                     <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
                       <div className="h-full rounded-full bg-[#1877F2] transition-all" style={{ width: `${gPct}%` }} />
                     </div>
-                    <p className="mt-1.5 flex items-center gap-1.5 text-xs text-foreground/60">
+                    <p className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-foreground/60">
                       <Zap className="size-3" /> {g.actionsDone}/{g.actionsTarget} posts
                       <ChevronRight className="size-3" />
                       {g.percentage}% de la campaña
@@ -389,18 +389,21 @@ export default function CampaignDetailPage() {
 function StatCard({ label, value, icon, color }: { label: string; value: number; icon: React.ReactNode; color: 'emerald' | 'red' | 'neutral' }) {
   const bg = color === 'emerald' ? 'bg-emerald-500/10 border-emerald-500/20' : color === 'red' ? 'bg-destructive/10 border-destructive/20' : 'bg-muted/50 border-border';
   return (
-    <div className={`rounded-lg border p-3 ${bg}`}>
-      <div className="flex items-center gap-1.5 text-xs text-foreground/60">{icon}{label}</div>
-      <p className="mt-1 text-2xl font-bold">{value}</p>
+    <div className={`min-w-0 overflow-hidden rounded-lg border p-3 ${bg}`}>
+      <div className="flex min-w-0 items-center gap-1.5 text-xs text-foreground/60">
+        <span className="shrink-0">{icon}</span>
+        <span className="truncate">{label}</span>
+      </div>
+      <p className="mt-1 truncate text-lg font-bold sm:text-2xl">{value}</p>
     </div>
   );
 }
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between">
-      <dt className="text-foreground/60">{label}</dt>
-      <dd className="font-medium">{value}</dd>
+    <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+      <dt className="shrink-0 text-foreground/60">{label}</dt>
+      <dd className="min-w-0 break-words text-right font-medium">{value}</dd>
     </div>
   );
 }

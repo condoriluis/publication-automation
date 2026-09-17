@@ -205,7 +205,7 @@ function CommentsContent() {
                     )}
                   </div>
                 </div>
-                <p className="whitespace-pre-wrap text-sm leading-relaxed">{c.message || <span className="text-foreground/40">(sin texto)</span>}</p>
+                <p className="break-words whitespace-pre-wrap text-sm leading-relaxed">{c.message || <span className="text-foreground/40">(sin texto)</span>}</p>
                 <p className="flex flex-wrap items-center gap-1.5 text-xs text-foreground/50">
                   <span className="font-medium text-foreground/70">{c.page?.name ?? 'Página'}</span>
                   <span>·</span>
@@ -256,7 +256,7 @@ function CommentsContent() {
                               Página
                             </span>
                           )}
-                          <p className="text-xs text-foreground/70">{r.message || '(sin texto)'}</p>
+                          <p className="break-words text-xs text-foreground/70">{r.message || '(sin texto)'}</p>
                         </div>
                       </div>
                     ))}

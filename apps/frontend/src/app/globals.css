@@ -85,6 +85,9 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans, system-ui, -apple-system, "Segoe UI", sans-serif);
   line-height: 1.5;
+  /* Evita scroll horizontal de página en móvil; los contenedores internos
+     (tablas, tabs, calendario) mantienen su scroll local. */
+  overflow-x: clip;
 }
 
 /* ── Scrollbar ──────────────────────────────────────────────────────────── */

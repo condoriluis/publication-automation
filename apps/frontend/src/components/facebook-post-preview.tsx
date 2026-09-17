@@ -145,7 +145,7 @@ export function FacebookPostPreview({
   return (
     <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 pb-3 pt-4">
+      <div className="flex flex-wrap items-center gap-3 px-4 pb-3 pt-4">
         <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#1877F2]">
           {pagePicture ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -174,10 +174,10 @@ export function FacebookPostPreview({
       </div>
 
       {/* Body */}
-      <p className="whitespace-pre-wrap px-4 text-[15px] leading-relaxed">
+      <p className="break-words whitespace-pre-wrap px-4 text-[15px] leading-relaxed">
         {fragments.map((f, i) =>
           f.type === 'link' ? (
-            <a key={i} href={f.value} target="_blank" rel="noopener noreferrer" className="text-[#1877F2] hover:underline">
+            <a key={i} href={f.value} target="_blank" rel="noopener noreferrer" className="break-all text-[#1877F2] hover:underline">
               {f.value}
             </a>
           ) : f.type === 'tag' ? (
