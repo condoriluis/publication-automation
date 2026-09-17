@@ -39,6 +39,10 @@ export interface GeneratePostInput {
   audience?: string;
   tone?: string;
   length?: PostLength;
+  /** Posición dentro de una tanda de publicaciones (para variar contenido). */
+  variant?: number;
+  /** Total de publicaciones de la tanda a la que pertenece. */
+  total?: number;
 }
 
 export interface GenerateCampaignConfigInput {
@@ -120,6 +124,9 @@ export class AiService {
       `Tema solicitado: ${input.theme}.`,
       input.audience ? `Audiencia objetivo: ${input.audience}.` : 'Analiza el tema y deduce la audiencia objetivo.',
       input.tone ? `Tono: ${input.tone}.` : 'Usa un tono altamente persuasivo y adecuado para la red social.',
+      input.variant && input.total
+        ? `Esta es la publicación ${input.variant} de una tanda de ${input.total}: usa un ángulo, un titular y ejemplos DIFERENTES a las demás publicaciones de la misma tanda.`
+        : '',
       hints,
       `Seed de variabilidad (ignóralo, es solo para forzar contenido único): ${Math.random().toString(36).substring(7)}`,
       'Redacta la publicación de Facebook ahora.',

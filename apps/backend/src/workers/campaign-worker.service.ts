@@ -205,6 +205,8 @@ export class CampaignWorkerService {
               page,
               theme: group.campaign.contentTemplate,
               length: 'medium',
+              variant: i + 1,
+              total: group.actionsTarget,
             });
           }
         } catch (err) {
