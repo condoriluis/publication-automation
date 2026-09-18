@@ -52,6 +52,16 @@ interface MetaPostRef {
   id: string;
 }
 
+/**
+ * Índice de posts de una entrada de webhook, construido con consultas
+ * minimizadas (una para ids exactos y otra para sufijos): evita el N+1 de
+ * resolver el post de cada comentario de forma individual.
+ */
+interface PostIndex {
+  byId: Map<string, string>;
+  bySuffix: Map<string, string>;
+}
+
 interface MetaEntry {
   id: string;
   time?: number;
@@ -109,12 +119,13 @@ export class WebhooksService {
       this.logger.warn(`Webhook de página no registrada: ${entry.id}`, 'WebhooksService');
       return;
     }
+    const postIndex = await this.buildPostIndex(entry);
     for (const change of entry.changes ?? []) {
       const v = change.value as MetaChangeValue;
       if (change.field === 'feed') {
         // Solo los cambios de comentarios importan; el resto son publicaciones
         if (v.item === 'comment') {
-          await this.processCommentEvent(change.value, page);
+          await this.processCommentEvent(change.value, page, postIndex);
         } else {
           this.logger.debug(
             `Change de feed "${v.item ?? '(sin item)'}" sin acciones de comentario`,
@@ -122,16 +133,62 @@ export class WebhooksService {
           );
         }
       } else if (change.field === 'comments') {
-        await this.processCommentEvent(change.value, page);
+        await this.processCommentEvent(change.value, page, postIndex);
       } else {
         this.logger.debug(`Campo de webhook "${change.field}" confirmado sin acciones`, 'WebhooksService');
       }
     }
   }
 
+  /** Resuelve en bloque los posts referenciados por una entrada de webhook. */
+  private async buildPostIndex(entry: MetaEntry): Promise<PostIndex> {
+    const index: PostIndex = { byId: new Map(), bySuffix: new Map() };
+    const ids = new Set<string>();
+    for (const change of entry.changes ?? []) {
+      const v = change.value as MetaChangeValue;
+      const raw = v.post_id;
+      if (raw !== undefined) ids.add(String(raw));
+    }
+    if (ids.size === 0) return index;
+
+    const exact = await this.prisma.post.findMany({
+      where: { metaObjectId: { in: Array.from(ids) } },
+      select: { id: true, metaObjectId: true },
+    });
+    for (const post of exact) {
+      if (post.metaObjectId) index.byId.set(post.metaObjectId, post.id);
+    }
+
+    const suffixes = new Set<string>();
+    for (const id of ids) {
+      if (index.byId.has(id)) continue;
+      const sep = id.lastIndexOf('_');
+      if (sep >= 0 && sep < id.length - 1) suffixes.add(id.slice(sep + 1));
+    }
+    if (suffixes.size > 0) {
+      const bySuffix = await this.prisma.post.findMany({
+        where: { metaObjectId: { in: Array.from(suffixes) } },
+        select: { id: true, metaObjectId: true },
+      });
+      for (const post of bySuffix) {
+        if (post.metaObjectId && !index.bySuffix.has(post.metaObjectId)) index.bySuffix.set(post.metaObjectId, post.id);
+      }
+    }
+    return index;
+  }
+
+  private lookupPost(index: PostIndex, metaPostId: string): string | undefined {
+    const byId = index.byId.get(metaPostId);
+    if (byId !== undefined) return byId;
+    const sep = metaPostId.lastIndexOf('_');
+    const suffix = sep >= 0 && sep < metaPostId.length - 1 ? metaPostId.slice(sep + 1) : metaPostId;
+    return index.bySuffix.get(suffix);
+  }
+
   private async processCommentEvent(
     value: Record<string, unknown>,
     page: { id: string; name: string; facebookPageId: string },
+    postIndex: PostIndex,
   ): Promise<void> {
     const v = value as MetaChangeValue;
     const metaCommentId = (v.comment_id ?? v.id) !== undefined ? String(v.comment_id ?? v.id) : '';
@@ -160,7 +217,7 @@ export class WebhooksService {
 
       // El comentario nunca fue ingerido (p. ej. moderado antes del primer sync):
       // se crea un registro mínimo para que la bandeja de moderación refleje la realidad.
-      const created = await this.ensureRecord(metaCommentId, value, page, { hidden: isDelete || isHidden === true });
+      const created = await this.ensureRecord(metaCommentId, value, page, { hidden: isDelete || isHidden === true }, postIndex);
       if (created) {
         await this.commentsService.applyIncomingModeration(metaCommentId, { deleted: isDelete, hidden: isHidden });
         this.logger.debug(
@@ -172,7 +229,6 @@ export class WebhooksService {
     }
 
     // --- add / edited: ingesta idempotente + actualización ---
-    const metaPostId = v.post_id !== undefined ? String(v.post_id) : '';
     const from = (v.from ?? {}) as Record<string, unknown>;
     const fromUserId = from.id !== undefined ? String(from.id) : undefined;
     const fromName = typeof from.name === 'string' ? from.name : undefined;
@@ -194,6 +250,7 @@ export class WebhooksService {
           fromUserId,
           fromName,
           createdAt,
+          postIndex,
         });
         if (result) this.triggerAutomation(result);
         return;
@@ -209,7 +266,12 @@ export class WebhooksService {
     }
 
     // verb=add (o desconocido): ingesta
-    const result = await this.createWithAutomation(metaCommentId, value, page, { fromUserId, fromName, createdAt });
+    const result = await this.createWithAutomation(metaCommentId, value, page, {
+      fromUserId,
+      fromName,
+      createdAt,
+      postIndex,
+    });
     if (result) this.triggerAutomation(result);
   }
 
@@ -222,6 +284,7 @@ export class WebhooksService {
     value: Record<string, unknown>,
     page: { id: string; name: string; facebookPageId: string },
     opts: { hidden?: boolean },
+    postIndex: PostIndex,
   ): Promise<MetaPostRef | null> {
     const v = value as MetaChangeValue;
     const from = (v.from ?? {}) as Record<string, unknown>;
@@ -231,6 +294,7 @@ export class WebhooksService {
       fromName: typeof from.name === 'string' ? from.name : undefined,
       createdAt,
       hidden: opts.hidden,
+      postIndex,
     });
   }
 
@@ -238,11 +302,14 @@ export class WebhooksService {
     metaCommentId: string,
     value: Record<string, unknown>,
     page: { id: string; name: string; facebookPageId: string },
-    opts: { fromUserId?: string; fromName?: string; createdAt?: Date; hidden?: boolean } = {},
+    opts: { fromUserId?: string; fromName?: string; createdAt?: Date; hidden?: boolean; postIndex: PostIndex } = { postIndex: { byId: new Map(), bySuffix: new Map() } },
   ): Promise<{ id: string; created: boolean } | null> {
     const v = value as MetaChangeValue;
     const metaPostId = v.post_id !== undefined ? String(v.post_id) : '';
-    const post = await this.findPostForObject(metaPostId);
+    const resolvedPostId = metaPostId ? this.lookupPost(opts.postIndex, metaPostId) : undefined;
+    const post = resolvedPostId
+      ? { id: resolvedPostId }
+      : await this.findPostForObject(metaPostId);
     if (!post) {
       this.logger.warn(
         `Comentario ${metaCommentId} sin publicación conocida (${metaPostId || 'sin post_id'}); descartado`,

@@ -22,6 +22,9 @@ export interface Paginated<T> {
 export const DEFAULT_PAGE = 1;
 export const DEFAULT_LIMIT = 20;
 export const MAX_LIMIT = 100;
+/** Cota superior del OFFSET para listas muy grandes: evita "deep pagination".
+ *  Conjuntos mayores requieren paginación por cursor. */
+export const MAX_OFFSET = 10_000;
 
 /** Normaliza page/limit (clamps) y deriva skip/take para Prisma. */
 export function parsePageOptions(query: Record<string, unknown> | undefined): PaginationOptions {
@@ -34,7 +37,8 @@ export function parsePageOptions(query: Record<string, unknown> | undefined): Pa
       : DEFAULT_LIMIT;
   const sortBy = typeof query?.sortBy === 'string' && query.sortBy.trim() ? query.sortBy.trim() : undefined;
   const sortOrder: 'asc' | 'desc' = query?.sortOrder === 'asc' ? 'asc' : 'desc';
-  return { page, limit, sortBy, sortOrder, skip: (page - 1) * limit, take: limit };
+  const skip = Math.min((page - 1) * limit, MAX_OFFSET);
+  return { page, limit, sortBy, sortOrder, skip, take: limit };
 }
 
 /** Envuelve resultados + total en un body paginado estable. */

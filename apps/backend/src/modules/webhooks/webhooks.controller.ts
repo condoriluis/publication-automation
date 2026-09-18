@@ -1,21 +1,26 @@
 import { Body, Controller, ForbiddenException, Get, HttpCode, Post, Query, Req } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { SkipThrottle } from '@nestjs/throttler';
+import { Throttle } from '@nestjs/throttler';
 import { Request } from 'express';
 import { RawBodyRequest } from '@nestjs/common';
 import { Public } from '../../common/decorators/auth.decorators';
+import { AppLogger } from '../../common/logger/app-logger.service';
 import { CryptoService } from '../../common/crypto/crypto.service';
 import { AppConfigService as AppConfig } from '../../config/app-config.service';
 import { WebhooksService } from './webhooks.service';
 
+// Meta entrega los eventos de forma secuencial; un límite holgado permite
+// ráfagas legítimas manteniendo el endpoint protegido ante abuso (sin
+// @SkipThrottle).
 @ApiTags('Webhooks Meta')
 @Controller('webhooks/meta')
-@SkipThrottle()
+@Throttle({ default: { limit: 600, ttl: 60_000 } })
 export class WebhooksController {
   constructor(
     private readonly webhooksService: WebhooksService,
     private readonly crypto: CryptoService,
     private readonly appConfig: AppConfig,
+    private readonly logger: AppLogger,
   ) {}
 
   @Get()
@@ -41,6 +46,16 @@ export class WebhooksController {
     if (!this.webhooksService.verifySignature(rawBody, signature)) {
       throw new ForbiddenException('Firma inválida del webhook de Meta');
     }
-    await this.webhooksService.processPayload(body);
+
+    // La ingesta se hace asíncrona para no bloquear la respuesta de Meta: si
+    // algo fallara, el sondeo programado (comment-poll) vuelve a descargar los
+    // comentarios de los posts recientes (eventual consistency).
+    void this.webhooksService.processPayload(body).catch((err: Error) => {
+      this.logger.error(
+        `Procesamiento asíncrono del webhook falló: ${err.message}`,
+        undefined,
+        'Webhooks',
+      );
+    });
   }
 }

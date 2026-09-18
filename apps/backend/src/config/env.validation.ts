@@ -39,7 +39,19 @@ const envSchema = z.object({
   BCRYPT_ROUNDS: z.coerce.number().int().min(4).max(15).default(12),
 
   // reCAPTCHA (login) — opcional: si no se define, la verificación se omite
-  RECAPTCHA_SECRET_KEY: z.string().optional(),
+  RECAPTCHA_SECRET_KEY: z
+    .string()
+    .optional()
+    .superRefine((value, ctx) => {
+      // Fail-closed: si se corre en producción sin secret, el arranque falla
+      // en lugar de dejar el login sin verificación antirrobot.
+      if (process.env.NODE_ENV === 'production' && !value) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'RECAPTCHA_SECRET_KEY es obligatoria en producción (fail-closed)',
+        });
+      }
+    }),
 
   // Cifrado AES-256-GCM para tokens de terceros (clave HEX de 32 bytes).
   // Requerida: sin ella el arranque falla (no se permite clave por defecto).
@@ -69,6 +81,9 @@ const envSchema = z.object({
   // Rate limiting
   THROTTLE_TTL_MS: z.coerce.number().int().min(1000).default(60000),
   THROTTLE_LIMIT: z.coerce.number().int().min(10).default(200),
+
+  // Retención de auditoría (purgado automático diario)
+  AUDIT_RETENTION_DAYS: z.coerce.number().int().positive().max(3650).optional(),
 
   // Logging
   LOG_LEVEL: z.string().optional(),
