@@ -531,6 +531,24 @@ model AIConfig {
   updatedAt   DateTime @updatedAt
 }
 
+/// Uso real de la IA por llamada (tokens, latencia y estado por proveedor/modelo).
+model AiUsage {
+  id           String   @id @default(cuid())
+  provider     String
+  model        String
+  feature      String
+  status       String   @default("SUCCESS")
+  inputTokens  Int      @default(0)
+  outputTokens Int      @default(0)
+  latencyMs    Int      @default(0)
+  errorMessage String?
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([provider, model])
+  @@index([createdAt, provider, model])
+}
+
 model AppSetting {
   id        String   @id @default("default")
   key       String

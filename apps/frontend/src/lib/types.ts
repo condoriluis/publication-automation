@@ -476,6 +476,62 @@ export interface AnalyzeCommentsResult {
   results: CommentAnalysisResult[];
 }
 
+// ── Gestión de IA (proveedores, config y uso de tokens) ──────────────────────
+export interface AiConfigView {
+  provider: string;
+  model: string;
+  baseUrl: string;
+  usesDefaultBaseUrl: boolean;
+  temperature: number;
+  maxTokens: number;
+  systemPrompt: string;
+  apiKeyMasked: string | null;
+}
+
+export interface UpdateAiConfigPayload {
+  provider?: string;
+  model?: string;
+  baseUrl?: string;
+  temperature?: number;
+  maxTokens?: number;
+  systemPrompt?: string;
+  apiKey?: string;
+}
+
+export interface AiConfigTestResult {
+  ok: boolean;
+  latencyMs: number;
+  provider: string;
+  model: string;
+  message: string;
+}
+
+export interface AiUsageRow {
+  id: string;
+  createdAt: string;
+  provider: string;
+  model: string;
+  feature: string;
+  status: string;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  latencyMs: number;
+  errorMessage: string | null;
+}
+
+export interface AiUsageSummaryRow {
+  provider: string;
+  model: string;
+  calls: number;
+  ok: number;
+  errors: number;
+  inputTokens: number;
+  outputTokens: number;
+  avgLatencyMs: number;
+  lastUsedAt: string | null;
+}
+
 // ── Usuarios (administración) ────────────────────────────────────────────────
 export type UserRole = 'ADMIN' | 'MANAGER' | 'OPERATOR';
 
