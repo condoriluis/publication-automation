@@ -1,8 +1,8 @@
-# Publication Automation 🚀
+# Publication Automation
 
-Plataforma **full-stack** para la **gestión y automatización de publicaciones e interacciones** de páginas de Facebook usando exclusivamente la **API oficial de Meta** (Graph API + OAuth + Webhooks), con capas de IA configurable, una **cola de trabajo propia sobre PostgreSQL** (claims atómicos con leases, sin Redis), auditoría total y una API preparada para producción.
+Plataforma **full-stack** para la **gestión y automatización de publicaciones e interacciones** de páginas de Facebook usando la **API oficial de Meta** (Graph API + OAuth + Webhooks), con IA configurable, una **cola de trabajo propia sobre PostgreSQL** (claims atómicos con leases, sin Redis) y un registro de auditoría completo.
 
-> ⚠️ **Advertencia de política**: esta herramienta **NO** evade ni elude límites, restricciones o sistemas anti-spam de Meta, ni fabrica interacción falsa. Todo se hace con el token del usuario final y los permisos reales que Meta otorga. Respetar la política de la plataforma es requisito de uso.
+> ⚠️ **Política**: la herramienta **NO** evita límites ni sistemas anti-spam de Meta, ni fabrica interacción falsa. Trabaja con el token del usuario y los permisos que Meta otorga. Respetar las políticas de Meta es requisito de uso.
 
 ---
 
@@ -12,13 +12,13 @@ Plataforma **full-stack** para la **gestión y automatización de publicaciones 
 |---|---|
 | API | NestJS 11 + TypeScript estricto |
 | ORM | Prisma 6 (PostgreSQL) |
-| Scheduler | @nestjs/schedule (intervalos) |
-| Colas | Cola propia en PostgreSQL: scheduler + worker con claims atómicos y leases (sin BullMQ/Redis) |
+| Scheduler | @nestjs/schedule (intervalos: campañas y publicación programada) |
+| Colas | Cola propia en PostgreSQL: worker + scheduler con claims atómicos y leases (sin BullMQ/Redis) |
 | DB | PostgreSQL 16 |
-| Validación | class-validator + Joi (env) + Zod (payloads IA) |
-| Seguridad | Helmet, CORS estricto, throttling, AES-256-GCM (tokens cifrados), bcrypt |
+| Validación | class-validator (DTOs) + Zod (env y payloads IA) |
+| Seguridad | Helmet, CORS estricto, throttling, AES-256-GCM (tokens en reposo), bcrypt, reCAPTCHA |
 | IA | OpenAI / Anthropic / Groq / Google / OpenRouter (configurable) |
-| Frontend | Next.js 15 App Router + React 19 + Tailwind + shadcn/ui + Sonner |
+| Frontend | Next.js 16 App Router + React 19 + Tailwind + shadcn/ui + Sonner |
 
 ---
 
@@ -26,99 +26,94 @@ Plataforma **full-stack** para la **gestión y automatización de publicaciones 
 
 ```
 publication-automation/
-├── docker-compose.yml        # postgres + api + worker + scheduler
-├── .env.example
+├── docker-compose.yml      # postgres + api + worker + scheduler
+├── render.yaml             # despliegue del backend en Render
 ├── apps/
-│   ├── backend/             # NestJS API (src/...)
-│   │   ├── prisma/schema.prisma
-│   │   ├── prisma/seed.ts
-│   │   └── src/main.ts
-│   └── frontend/            # Next.js 15 (App Router)
-└── (monorepo)  workspaces: apps/*
+│   ├── backend/            # NestJS API (api/), worker (worker.ts), scheduler (scheduler.ts)
+│   │   ├── prisma/schema.prisma + seed.ts
+│   │   └── src/
+│   │       ├── modules/    # auth, users, pages, facebook, campaigns, posts, comments,
+│   │       │               # ai, dashboard, audit, webhooks, health
+│   │       └── workers/    # campaign-executor, campaign-scheduler, campaign-worker,
+│   │                       # scheduled-post-publisher
+│   └── frontend/           # Next.js 16 (App Router)
 ```
 
-Backend (módulos → `apps/backend/src/modules/`): `auth`, `users`, `pages`, `facebook` (OAuth + Graph), `campaigns`, `posts`, `comments`, `ai`, `dashboard`, `audit`, `webhooks`, `health`, `users`.
-Orquestación en `src/workers/`: `campaign-executor` (ejecución), `campaign-scheduler` (activación/cierre de campañas), `campaign-worker` (SQL de fondo).
+Monorepo con **npm workspaces** (`apps/*`).
 
 ---
 
 ## 🚀 Desarrollo rápido
 
-Requisitos: **Docker Desktop** con Compose v2, Node 20+.
+Requisitos: Docker Desktop (Compose v2) y Node 20+.
 
-1. Copia `apps/backend/.env.example` → `apps/backend/.env` y rellena al menos `FACEBOOK_APP_ID/SECRET`, `DATABASE_URL`, `JWT_SECRET`, `META_*`.
-   > `DATABASE_URL`/`DIRECT_URL` apuntan al Postgres; en local, al contenedor `pa-postgres` (`localhost:5433`).
-2. Levantar infraestructura:
+1. Copia `apps/backend/.env.example` → `apps/backend/.env` y completa al menos `DATABASE_URL`/`DIRECT_URL`, `JWT_SECRET`, `REFRESH_TOKEN_SECRET`, `TOKEN_ENCRYPTION_KEY` (HEX de 64 chars, obligatoria) y las `FACEBOOK_APP_*`/`META_*`.
+2. Levanta la base:
    ```bash
    docker compose up -d postgres
    ```
-3. Backend (con hot-reload):
-   ```bash
-   npm run dev:backend
-   ```
-   > En desarrollo la API responde en `http://localhost:3001/api/v1`. Docs Swagger en `/api/docs`.
+3. Backend (hot-reload) → `npm run dev:backend`
+4. Migraciones + seed → `npm run db:migrate && npm run db:seed`
+5. Frontend → `npm run dev:frontend` (en `http://localhost:3000`)
 
-4. Migraciones + seed:
-   ```bash
-   npm run db:migrate && npm run db:seed
-   ```
+La API responde en `http://localhost:3001/api/v1` (prefijo global `api`), con Swagger en `/api/docs`.
 
-### Todo con Docker (producción-like)
+### Producción-like con Docker
 
 ```bash
 docker compose up --build -d
-docker compose ps
 ```
 
-Servicios: `postgres` (5433), `api` (3001), `worker` (SQL de fondo), `scheduler` (intervalos). La API expone `/health`.
-Los tres procesos de la app compiten por claims atómicos en PostgreSQL (multiréplica sin duplicados).
+Servicios: `postgres` (5433), `api` (3001), `worker` y `scheduler` (procesos en segundo plano). Los tres procesos de la app compiten por claims atómicos en PostgreSQL, así que pueden replicarse sin duplicados.
 
 ---
 
-## 🔐 Variables de entorno clave (ver `.env.example`)
+## 🔐 Variables clave (ver `apps/backend/.env.example`)
 
 | Variable | Descripción |
 |---|---|
-| `DATABASE_URL` / `DIRECT_URL` | DSN PostgreSQL (pooler + directo para migraciones) |
-| `WORKER_CONCURRENCY` | Publicaciones simultáneas del worker |
-| `WORKER_LEASE_MS` / `WORKER_MAX_ATTEMPTS` / `WORKER_RETRY_BACKOFF_MS` | Lease de claims, intentos máx. y backoff ante fallos transitorios |
-| `JWT_SECRET` / `REFRESH_TOKEN_SECRET` | ≥32 chars, firmas JWT |
-| `FACEBOOK_APP_ID/SECRET` | App de Meta (developers.facebook.com) |
-| `META_OAUTH_REDIRECT_URI` | Debe estar registrada en la app |
-| `META_WEBHOOK_VERIFY_TOKEN` | Verificación webhook |
-| `TOKEN_ENCRYPTION_KEY` | **AES-256-GCM** para tokens en reposo (¡cámbialo!) |
-| `AI_*` | Proveedor/modelo/API key para generación |
-| `THROTTLE_*`, `CORS_ORIGINS` | Protección y CORS |
+| `DATABASE_URL` / `DIRECT_URL` | DSN PostgreSQL (pooled para runtime, directa para migraciones) |
+| `TOKEN_ENCRYPTION_KEY` | **Obligatoria** (HEX 64). AES-256-GCM de los tokens de Facebook |
+| `JWT_SECRET` / `REFRESH_TOKEN_SECRET` | ≥32 chars; firmas de JWT y refresh tokens |
+| `FACEBOOK_APP_ID` / `FACEBOOK_APP_SECRET` / `FACEBOOK_API_VERSION` | App de Meta (v26.0) |
+| `META_OAUTH_REDIRECT_URI` / `META_OAUTH_SCOPES` | Callback OAuth y scopes solicitados |
+| `META_WEBHOOK_VERIFY_TOKEN` | Verificación del webhook de Meta |
+| `RECAPTCHA_SECRET_KEY` | **Obligatorio en producción** (fail-closed) |
+| `AI_PROVIDER` / `AI_MODEL` / `AI_API_KEY` | Proveedor/modelo/clave de IA |
+| `WORKER_CONCURRENCY` / `WORKER_LEASE_MS` / `WORKER_MAX_ATTEMPTS` / `WORKER_RETRY_BACKOFF_MS` | Concurrencia, leases y reintentos del worker |
+| `AUDIT_RETENTION_DAYS` | Días de retención del registro de auditoría (purga diaria) |
 
 ---
 
 ## 🔌 Conexión con Facebook (Meta)
 
-1. En `login` → botón "Conectar con Facebook" → OAuth de Meta (App ID/SECRET + scopes `pages_show_list, pages_manage_posts, pages_read_engagement, ...`).
-2. Callback intercambia el código por `access_token` vía Graph API, **se cifra con `TOKEN_ENCRYPTION_KEY`** (AES-256-GCM) y se guarda.
-3. `/facebook/accounts`, `/pages` (sync páginas), `/campaigns`, `/posts`, `/comments` gestionan el flujo.
-4. Webhooks `/webhooks` reciben comentarios/insights de Meta; la IA propone (¡nunca auto-publica sin aprobación!).
-
----
-
-## 🧪 Tests
-
-```bash
-cd apps/backend && npm test
-```
-
-No hay datos falsos: los mocks sustituyen exclusivamente llamadas de red; las entidades vienen de Prisma real.
+1. En `login` → "Conectar con Facebook": OAuth con los scopes `META_OAUTH_SCOPES` (email, `pages_show_list`, `pages_read_engagement`, `pages_manage_posts`, `pages_manage_engagement`, `pages_manage_metadata`, `business_management`).
+2. El callback intercambia el código por `access_token` vía Graph API, **se cifra con `TOKEN_ENCRYPTION_KEY`** (AES-256-GCM) y se guarda. Para rotar la clave existe `npm run encryption:rekey` (y `encryption:rekey:dry`).
+3. El webhook recibe comentarios vía `subscribed_apps`; la IA los clasifica. Como respaldo hay sondeo programado de comentarios (`COMMENT_POLL_*`).
+4. Al conectar, el token corto se convierte en **long-lived (~60 días)** vía `fb_exchange_token`, se guarda cifrado su fecha de vencimiento y se renueva reconectando por OAuth.
 
 ---
 
 ## 🧠 IA
 
-- `AiModule` de `src/modules/ai/ai.module.ts` → `AiService` con proveedor configurable (OpenAI/Anthropic/Groq/OpenRouter/Google).
-- Métodos: generar contenido de post, respuestas de comentarios, análisis/riesgo de comentarios, moderación sugerida.
+- `AiModule` → `AiService` con proveedor configurable (`AI_PROVIDER`).
+- Funciones: generar contenido de posts y campañas, redactar respuestas a comentarios, **analizar/clasificar comentarios** (riesgo, sentimiento, acción sugerida) y moderación sugerida.
+- Por debajo del umbral de confianza (80) el comentario pasa a **revisión humana**.
 - **La IA nunca ejecuta acciones por sí sola**: siempre devuelve una propuesta que el usuario aprueba.
+
+---
+
+## ✔️ Checks
+
+```bash
+npm run lint                # frontend + backend
+npm run build:backend       # prisma generate + nest build
+npm run build:frontend      # next build (desde apps/frontend)
+npm run test                # jest (configurado; sin tests por ahora)
+```
 
 ---
 
 ## 📄 Licencia
 
-MIT. Por favor, respeta las políticas de Meta y los términos de uso de las APIs.
+MIT. Respeta las políticas de Meta y los términos de uso de las APIs.
