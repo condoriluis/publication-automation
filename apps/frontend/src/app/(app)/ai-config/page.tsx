@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { type ColumnDef } from '@tanstack/react-table';
 import {
   Sparkles,
   KeyRound,
@@ -28,6 +29,7 @@ import type {
   UpdatePromptPayload,
 } from '@/lib/types';
 import { PageHeader } from '@/components/page-header';
+import { DataTable } from '@/components/ui/data-table';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -63,33 +65,33 @@ const FEATURE_LABELS: Record<string, string> = {
 const PROMPT_FEATURES: { value: AiPromptFeature; label: string; description: string }[] = [
   {
     value: 'generate_post',
-    label: 'Publicaciones en la página',
-    description: 'El texto de los posts que creas desde el panel.',
+    label: 'Publicaciones (Posts)',
+    description: 'Texto para los posts creados desde el panel.',
   },
   {
     value: 'generate_campaign',
     label: 'Campañas',
-    description: 'El contenido inicial (descripción, plantilla del post e intervalo) de una campaña.',
+    description: 'Contenido inicial de una campaña.',
   },
   {
     value: 'comment_reply',
-    label: 'Respuestas a comentarios',
-    description: 'La respuesta sugerida cuando respondes un comentario de forma manual.',
+    label: 'Respuesta manual',
+    description: 'Sugerencias al responder comentarios.',
   },
   {
     value: 'generate_reply',
-    label: 'Respuestas automáticas',
-    description: 'Las respuestas que las tareas automáticas publican solas cuando corresponde.',
+    label: 'Respuesta automática',
+    description: 'Respuestas publicadas por el sistema.',
   },
   {
     value: 'analyze_comment',
-    label: 'Análisis de comentarios',
-    description: 'Clasifica cada comentario (riesgo, si pregunta o si quiere comprar) para gestionarlo mejor.',
+    label: 'Análisis de sentimiento',
+    description: 'Clasificación de riesgo e intención.',
   },
   {
     value: 'moderate_comment',
-    label: 'Moderación de comentarios',
-    description: 'Sugiere si un comentario debe responderse, ocultarse o eliminarse.',
+    label: 'Moderación',
+    description: 'Decisión sobre ocultar o responder.',
   },
 ];
 
@@ -102,7 +104,7 @@ function fmtMs(ms: number): string {
 }
 
 export default function AiConfigPage() {
-  const { user } = useAuthAdmin();
+  const { user, isLoading } = useAuthAdmin();
   const canManage = Boolean(user?.roles.some((r) => r === 'ADMIN' || r === 'MANAGER'));
 
   const [config, setConfig] = useState<AiConfigView | null>(null);
@@ -110,6 +112,7 @@ export default function AiConfigPage() {
   const [summary, setSummary] = useState<AiUsageSummaryRow[]>([]);
   const [usage, setUsage] = useState<Paginated<AiUsageRow> | null>(null);
   const [usagePage, setUsagePage] = useState(1);
+  const [usageLimit, setUsageLimit] = useState(10);
 
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -137,10 +140,18 @@ export default function AiConfigPage() {
   useEffect(() => {
     if (!canManage) return;
     api
-      .get<Paginated<AiUsageRow>>(`/ai/usage?page=${usagePage}&limit=12`)
+      .get<Paginated<AiUsageRow>>(`/ai/usage?page=${usagePage}&limit=${usageLimit}`)
       .then(setUsage)
       .catch(() => undefined);
-  }, [canManage, usagePage]);
+  }, [canManage, usagePage, usageLimit]);
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-[400px] items-center justify-center">
+        <Loader2 className="size-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   if (!canManage) {
     return (
@@ -210,8 +221,8 @@ export default function AiConfigPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="IA · Gestión"
-        subtitle="Proveedor y modelo, instrucciones de la IA y consumo real de tokens"
+        title="Inteligencia Artificial"
+        subtitle="Configuración de proveedor, comportamiento y métricas de uso"
       />
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -237,7 +248,13 @@ export default function AiConfigPage() {
         onRestore={restorePrompt}
       />
 
-      <ActivityCard usage={usage} page={usagePage} onPage={setUsagePage} />
+      <ActivityCard 
+        usage={usage} 
+        onPaginationChange={(page, limit) => {
+          setUsagePage(page);
+          setUsageLimit(limit);
+        }} 
+      />
     </div>
   );
 }
@@ -297,34 +314,35 @@ function ConfigCard({
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="baseUrl">Base URL (opcional)</Label>
+          <Label htmlFor="baseUrl">Base URL (Opcional)</Label>
           <Input
             id="baseUrl"
             value={baseUrl}
             onChange={(e) => setBaseUrl(e.target.value)}
-            placeholder="Vacío = endpoint por defecto del proveedor"
+            placeholder="Dejar vacío para el endpoint por defecto"
           />
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="apiKey">API key (déjalo vacío para conservar la actual)</Label>
+          <Label htmlFor="apiKey">API Key</Label>
           <Input
             id="apiKey"
             type="password"
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
-            placeholder="Nueva API key del proveedor (vacío = conservar la actual)"
+            placeholder="Nueva clave (dejar vacío para mantener actual)"
             autoComplete="off"
           />
         </div>
 
-        <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
+        <div className="flex flex-col sm:flex-row items-center justify-end gap-2 pt-1">
           <Button
             type="button"
             variant="outline"
             size="sm"
             disabled={testing}
             onClick={() => void onTest()}
+            className="w-full sm:w-auto"
           >
             {testing ? <Loader2 className="animate-spin" /> : <Zap className="size-3.5" />}
             Probar conexión
@@ -339,7 +357,7 @@ function ConfigCard({
               baseUrl: baseUrl.trim(),
               apiKey: apiKey.trim(),
             })}
-            className="bg-[#1877F2] hover:bg-[#0A5BC4] text-white shadow-sm"
+            className="w-full sm:w-auto bg-[#1877F2] hover:bg-[#0A5BC4] text-white shadow-sm"
           >
             {saving ? <Loader2 className="animate-spin" /> : <Sparkles className="size-3.5" />}
             Guardar configuración
@@ -370,15 +388,14 @@ function GlobalInstructionsCard({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <p className="text-sm text-foreground/60">
-          Un texto corto que se aplica a <strong>todas</strong> las funciones, por ejemplo el tono o la voz de tu
-          marca. Si no sabes qué escribir, déjalo vacío: no es obligatorio.
+        <p className="text-sm text-muted-foreground">
+          Define el contexto general, como el tono de voz de tu marca. Se aplicará a todas las interacciones.
         </p>
         <Textarea
           value={value}
           onChange={(e) => setValue(e.target.value)}
           rows={3}
-          placeholder="P. ej.: Habla siempre en tono cercano y con la voz de «Mi Negocio»."
+          placeholder="Ej: Eres un asistente amigable y profesional para [Nombre Empresa]..."
         />
         <div className="flex items-center justify-end gap-2">
           <Button
@@ -417,28 +434,14 @@ function PromptsCard({
   onRestore: (feature: AiPromptFeature) => Promise<void>;
 }) {
   const featureMeta = features.find((f) => f.value === selectedFeature) ?? features[0];
-  const [systemPrompt, setSystemPrompt] = useState(() => view?.systemPrompt ?? '');
-  const [temperature, setTemperature] = useState<string>(() => String(view?.effectiveTemperature ?? 0.7));
-  const [maxTokens, setMaxTokens] = useState<string>(() => String(view?.effectiveMaxTokens ?? 1024));
-  const [saving, setSaving] = useState(false);
-  const [restoring, setRestoring] = useState(false);
-
-  function resetEditor(next: PromptTemplateView | null) {
-    setSystemPrompt(next?.systemPrompt ?? '');
-    setTemperature(String(next?.effectiveTemperature ?? 0.7));
-    setMaxTokens(String(next?.effectiveMaxTokens ?? 1024));
-  }
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
           <SlidersHorizontal className="size-4 text-[#1877F2]" />
-          Cómo se comporta la IA en cada función
+          Comportamiento por Función
         </CardTitle>
-        <p className="text-sm text-foreground/60">
-          Las instrucciones de cada función son opcionales: si no editas nada, funcionan los valores recomendados.
-        </p>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-1.5">
@@ -446,7 +449,6 @@ function PromptsCard({
           <Select
             value={selectedFeature}
             onValueChange={(v) => {
-              resetEditor(null);
               onSelectFeature(v as AiPromptFeature);
             }}
           >
@@ -469,116 +471,140 @@ function PromptsCard({
             ))}
           </div>
         ) : (
-          <div
+          <PromptEditorForm
             key={`${view.feature}:${view.version}`}
-            className="space-y-4 rounded-lg border p-4"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2 text-xs text-foreground/50">
-                <Badge variant="secondary">v{view.version}</Badge>
-                <span>{view.isDefault ? 'Usa los valores por defecto' : 'Personalizado'}</span>
-                {view.updatedAt ? <span>· editado {formatRelative(view.updatedAt)}</span> : null}
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="prompt-text">Instrucciones para esta función</Label>
-              <Textarea
-                id="prompt-text"
-                value={systemPrompt}
-                onChange={(e) => setSystemPrompt(e.target.value)}
-                rows={10}
-                placeholder="Describe cómo quieres que escriba la IA en esta función…"
-              />
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="prompt-temperature">Creatividad (temperatura 0–2)</Label>
-                <Input
-                  id="prompt-temperature"
-                  type="number"
-                  step="0.1"
-                  min={0}
-                  max={2}
-                  value={temperature}
-                  onChange={(e) => setTemperature(e.target.value)}
-                />
-                <p className="text-xs text-foreground/50">
-                  Baja (0) = siempre igual y preciso · Alta (2) = más variado y creativo.
-                </p>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="prompt-maxTokens">Límite de escritura (tokens de salida)</Label>
-                <Input
-                  id="prompt-maxTokens"
-                  type="number"
-                  min={1}
-                  max={65536}
-                  value={maxTokens}
-                  onChange={(e) => setMaxTokens(e.target.value)}
-                />
-                <p className="text-xs text-foreground/50">
-                  Cuánto texto puede escribir como máximo. Un post largo usa unos 1000.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-start justify-between gap-3 pt-1">
-              <p className="flex max-w-xl items-start gap-1.5 text-xs text-foreground/50">
-                <Lock className="mt-0.5 size-3.5 shrink-0" />
-                La aplicación añade automáticamente los datos de tu página, el tema y un bloque de seguridad que no
-                puede editarse, para proteger tu información y cumplir las normas de Meta.
-              </p>
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={restoring || saving}
-                  onClick={() => {
-                    setRestoring(true);
-                    void onRestore(selectedFeature)
-                      .then(() => resetEditor(view))
-                      .finally(() => setRestoring(false));
-                  }}
-                >
-                  {restoring ? <Loader2 className="animate-spin" /> : <RotateCcw className="size-3.5" />}
-                  Restaurar por defecto
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={saving}
-                  onClick={() => {
-                    const temp = Number(temperature);
-                    const max = Number(maxTokens);
-                    if (!Number.isFinite(temp) || temp < 0 || temp > 2) {
-                      toast.error('La creatividad debe ser un número entre 0 y 2');
-                      return;
-                    }
-                    if (!Number.isInteger(max) || max < 1 || max > 65536) {
-                      toast.error('El límite de escritura debe ser un número entre 1 y 65536');
-                      return;
-                    }
-                    setSaving(true);
-                    void onSave(selectedFeature, {
-                      systemPrompt,
-                      temperature: temp,
-                      maxTokens: max,
-                    }).finally(() => setSaving(false));
-                  }}
-                  className="bg-[#1877F2] hover:bg-[#0A5BC4] text-white shadow-sm"
-                >
-                  {saving ? <Loader2 className="animate-spin" /> : <SlidersHorizontal className="size-3.5" />}
-                  Guardar
-                </Button>
-              </div>
-            </div>
-          </div>
+            view={view}
+            selectedFeature={selectedFeature}
+            onSave={onSave}
+            onRestore={onRestore}
+          />
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function PromptEditorForm({
+  view,
+  selectedFeature,
+  onSave,
+  onRestore,
+}: {
+  view: PromptTemplateView;
+  selectedFeature: AiPromptFeature;
+  onSave: (feature: AiPromptFeature, dto: UpdatePromptPayload) => Promise<void>;
+  onRestore: (feature: AiPromptFeature) => Promise<void>;
+}) {
+  const [systemPrompt, setSystemPrompt] = useState(() => view.systemPrompt ?? '');
+  const [temperature, setTemperature] = useState<string>(() => String(view.effectiveTemperature ?? 0.7));
+  const [maxTokens, setMaxTokens] = useState<string>(() => String(view.effectiveMaxTokens ?? 1024));
+  const [saving, setSaving] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+
+  return (
+    <div className="space-y-4 rounded-lg border p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-xs text-foreground/50">
+          <Badge variant="secondary">v{view.version}</Badge>
+          <span>{view.isDefault ? 'Usa los valores por defecto' : 'Personalizado'}</span>
+          {view.updatedAt ? <span>· editado {formatRelative(view.updatedAt)}</span> : null}
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="prompt-text">Instrucciones Específicas</Label>
+        <Textarea
+          id="prompt-text"
+          value={systemPrompt}
+          onChange={(e) => setSystemPrompt(e.target.value)}
+          rows={8}
+          placeholder="Describe el comportamiento esperado para esta función..."
+        />
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="prompt-temperature">Temperatura (Creatividad)</Label>
+          <div className="flex items-center gap-3">
+            <Input
+              id="prompt-temperature"
+              type="number"
+              step="0.1"
+              min={0}
+              max={2}
+              value={temperature}
+              onChange={(e) => setTemperature(e.target.value)}
+              className="w-24"
+            />
+            <span className="text-xs text-muted-foreground">0 = Preciso, 2 = Creativo</span>
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="prompt-maxTokens">Límite de Tokens (Salida)</Label>
+          <div className="flex items-center gap-3">
+            <Input
+              id="prompt-maxTokens"
+              type="number"
+              min={1}
+              max={65536}
+              value={maxTokens}
+              onChange={(e) => setMaxTokens(e.target.value)}
+              className="w-32"
+            />
+            <span className="text-xs text-muted-foreground">Longitud máx. de respuesta</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between pt-2">
+        <p className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 px-3 py-1.5 rounded-md">
+          <Lock className="size-3 shrink-0" />
+          Bloque de seguridad inyectado por defecto.
+        </p>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={restoring || saving}
+            onClick={() => {
+              setRestoring(true);
+              void onRestore(selectedFeature).finally(() => setRestoring(false));
+            }}
+          >
+            {restoring ? <Loader2 className="animate-spin" /> : <RotateCcw className="size-3.5" />}
+            Restaurar por defecto
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            disabled={saving}
+            onClick={() => {
+              const temp = Number(temperature);
+              const max = Number(maxTokens);
+              if (!Number.isFinite(temp) || temp < 0 || temp > 2) {
+                toast.error('La creatividad debe ser un número entre 0 y 2');
+                return;
+              }
+              if (!Number.isInteger(max) || max < 1 || max > 65536) {
+                toast.error('El límite de escritura debe ser un número entre 1 y 65536');
+                return;
+              }
+              setSaving(true);
+              void onSave(selectedFeature, {
+                systemPrompt,
+                temperature: temp,
+                maxTokens: max,
+              }).finally(() => setSaving(false));
+            }}
+            className="bg-[#1877F2] hover:bg-[#0A5BC4] text-white shadow-sm"
+          >
+            {saving ? <Loader2 className="animate-spin" /> : <SlidersHorizontal className="size-3.5" />}
+            Guardar
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -587,55 +613,71 @@ function SummaryCard({ summary }: { summary: AiUsageSummaryRow[] }) {
   const totalTokens = summary.reduce((acc, s) => acc + s.inputTokens + s.outputTokens, 0);
   const totalCalls = summary.reduce((acc, s) => acc + s.calls, 0);
 
+  const columns: ColumnDef<AiUsageSummaryRow>[] = [
+    {
+      accessorKey: 'provider',
+      header: 'Proveedor',
+      cell: ({ row }) => PROVIDER_LABELS[row.original.provider] ?? row.original.provider,
+    },
+    {
+      accessorKey: 'model',
+      header: 'Modelo',
+      cell: ({ row }) => <span className="font-medium">{row.original.model}</span>,
+    },
+    {
+      accessorKey: 'calls',
+      header: 'Llamadas',
+      cell: ({ row }) => <span className="tabular-nums">{fmt(row.original.calls)}</span>,
+    },
+    {
+      id: 'status',
+      header: 'OK / Err',
+      cell: ({ row }) => (
+        <span className="tabular-nums">
+          <span className="text-emerald-600 dark:text-emerald-400">{row.original.ok}</span>
+          <span className="mx-1 text-muted-foreground">/</span>
+          <span className={row.original.errors > 0 ? 'text-red-600 dark:text-red-400' : ''}>{row.original.errors}</span>
+        </span>
+      ),
+    },
+    {
+      accessorKey: 'inputTokens',
+      header: 'Tokens in',
+      cell: ({ row }) => <span className="tabular-nums">{fmt(row.original.inputTokens)}</span>,
+    },
+    {
+      accessorKey: 'outputTokens',
+      header: 'Tokens out',
+      cell: ({ row }) => <span className="tabular-nums">{fmt(row.original.outputTokens)}</span>,
+    },
+    {
+      accessorKey: 'avgLatencyMs',
+      header: 'Lat. media',
+      cell: ({ row }) => <span className="tabular-nums">{fmtMs(row.original.avgLatencyMs)}</span>,
+    },
+    {
+      accessorKey: 'lastUsedAt',
+      header: 'Último uso',
+      cell: ({ row }) => <span className="whitespace-nowrap text-muted-foreground">{row.original.lastUsedAt ? formatRelative(row.original.lastUsedAt) : '—'}</span>,
+    },
+  ];
+
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-x-2">
+      <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <CardTitle className="text-base">Uso por proveedor y modelo</CardTitle>
-        <div className="flex items-center gap-3 text-xs text-foreground/50">
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
           <span>{fmt(totalCalls)} llamadas</span>
           <span>{fmt(totalTokens)} tokens</span>
         </div>
       </CardHeader>
-      <CardContent className="p-0 sm:p-6">
+      <CardContent>
         {summary.length === 0 ? (
-          <p className="px-4 pb-4 text-sm text-foreground/50 sm:px-0">
+          <p className="text-sm text-muted-foreground">
             Sin registros todavía. El consumo se mide a partir de la primera llamada de IA.
           </p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-sm">
-              <thead>
-                <tr className="border-b text-left text-xs text-foreground/50">
-                  <th className="px-4 py-2 font-medium sm:pl-0">Proveedor</th>
-                  <th className="px-4 py-2 font-medium">Modelo</th>
-                  <th className="px-4 py-2 text-right font-medium">Llamadas</th>
-                  <th className="px-4 py-2 text-right font-medium">OK / Err</th>
-                  <th className="px-4 py-2 text-right font-medium">Tokens in</th>
-                  <th className="px-4 py-2 text-right font-medium">Tokens out</th>
-                  <th className="px-4 py-2 text-right font-medium">Lat. media</th>
-                  <th className="px-4 py-2 text-right font-medium">Último uso</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {summary.map((s) => (
-                  <tr key={`${s.provider}::${s.model}`}>
-                    <td className="px-4 py-2.5 sm:pl-0">{PROVIDER_LABELS[s.provider] ?? s.provider}</td>
-                    <td className="px-4 py-2.5 font-medium">{s.model}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums">{fmt(s.calls)}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums">
-                      <span className="text-emerald-600 dark:text-emerald-400">{s.ok}</span>
-                      <span className="mx-1 text-foreground/30">/</span>
-                      <span className={s.errors > 0 ? 'text-red-600 dark:text-red-400' : ''}>{s.errors}</span>
-                    </td>
-                    <td className="px-4 py-2.5 text-right tabular-nums">{fmt(s.inputTokens)}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums">{fmt(s.outputTokens)}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums">{fmtMs(s.avgLatencyMs)}</td>
-                    <td className="px-4 py-2.5 text-right whitespace-nowrap text-foreground/50">{s.lastUsedAt ? formatRelative(s.lastUsedAt) : '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable columns={columns} data={summary} />
         )}
       </CardContent>
     </Card>
@@ -645,85 +687,83 @@ function SummaryCard({ summary }: { summary: AiUsageSummaryRow[] }) {
 /* ── Actividad reciente ───────────────────────────────────────────────────── */
 function ActivityCard({
   usage,
-  page,
-  onPage,
+  onPaginationChange,
 }: {
   usage: Paginated<AiUsageRow> | null;
-  page: number;
-  onPage: (p: number) => void;
+  onPaginationChange: (page: number, limit: number) => void;
 }) {
+  const columns: ColumnDef<AiUsageRow>[] = [
+    {
+      accessorKey: 'createdAt',
+      header: 'Fecha',
+      cell: ({ row }) => <span className="whitespace-nowrap text-muted-foreground">{formatRelative(row.original.createdAt)}</span>,
+    },
+    {
+      accessorKey: 'feature',
+      header: 'Función',
+      cell: ({ row }) => FEATURE_LABELS[row.original.feature] ?? row.original.feature,
+    },
+    {
+      accessorKey: 'provider',
+      header: 'Proveedor',
+      cell: ({ row }) => PROVIDER_LABELS[row.original.provider] ?? row.original.provider,
+    },
+    {
+      accessorKey: 'model',
+      header: 'Modelo',
+      cell: ({ row }) => <span className="font-medium">{row.original.model}</span>,
+    },
+    {
+      accessorKey: 'inputTokens',
+      header: 'In',
+      cell: ({ row }) => <span className="tabular-nums">{fmt(row.original.inputTokens)}</span>,
+    },
+    {
+      accessorKey: 'outputTokens',
+      header: 'Out',
+      cell: ({ row }) => <span className="tabular-nums">{fmt(row.original.outputTokens)}</span>,
+    },
+    {
+      accessorKey: 'latencyMs',
+      header: 'Latencia',
+      cell: ({ row }) => <span className="tabular-nums">{fmtMs(row.original.latencyMs)}</span>,
+    },
+    {
+      accessorKey: 'status',
+      header: 'Estado',
+      cell: ({ row }) => {
+        const r = row.original;
+        return r.status === 'SUCCESS' ? (
+          <div className="flex justify-end"><CircleCheck className="size-4 text-emerald-600 dark:text-emerald-400" /></div>
+        ) : (
+          <div className="flex items-center justify-end gap-1 text-red-600 dark:text-red-400">
+            <CircleX className="size-4 shrink-0" />
+            <span className="truncate max-w-[150px]" title={r.errorMessage ?? ''}>
+              {r.errorMessage ? r.errorMessage.split('\n')[0] : 'ERROR'}
+            </span>
+          </div>
+        );
+      },
+    },
+  ];
+
   return (
     <Card>
-      <CardHeader className="flex flex-wrap items-center justify-between gap-2">
+      <CardHeader>
         <CardTitle className="text-base">Actividad reciente de IA</CardTitle>
-        {usage ? (
-          <span className="text-xs text-foreground/50">
-            {usage.meta.total} registros · página {usage.meta.page} de {usage.meta.totalPages}
-          </span>
-        ) : null}
       </CardHeader>
-      <CardContent className="space-y-4 p-0 sm:p-6">
-        {!usage ? (
-          <div className="space-y-2 px-4 sm:px-0">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-10" />
-            ))}
-          </div>
-        ) : usage.data.length === 0 ? (
-          <p className="px-4 pb-4 text-sm text-foreground/50 sm:px-0">Sin actividad todavía.</p>
+      <CardContent>
+        {usage?.data.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Sin actividad todavía.</p>
         ) : (
-          <>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] text-sm">
-                <thead>
-                  <tr className="border-b text-left text-xs text-foreground/50">
-                    <th className="px-4 py-2 font-medium sm:pl-0">Fecha</th>
-                    <th className="px-4 py-2 font-medium">Función</th>
-                    <th className="px-4 py-2 font-medium">Proveedor</th>
-                    <th className="px-4 py-2 font-medium">Modelo</th>
-                    <th className="px-4 py-2 text-right font-medium">In</th>
-                    <th className="px-4 py-2 text-right font-medium">Out</th>
-                    <th className="px-4 py-2 text-right font-medium">Latencia</th>
-                    <th className="px-4 py-2 text-right font-medium">Estado</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {usage.data.map((r) => (
-                    <tr key={r.id}>
-                      <td className="whitespace-nowrap px-4 py-2.5 text-foreground/50 sm:pl-0">{formatRelative(r.createdAt)}</td>
-                      <td className="px-4 py-2.5">{FEATURE_LABELS[r.feature] ?? r.feature}</td>
-                      <td className="px-4 py-2.5">{PROVIDER_LABELS[r.provider] ?? r.provider}</td>
-                      <td className="px-4 py-2.5 font-medium">{r.model}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums">{fmt(r.inputTokens)}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums">{fmt(r.outputTokens)}</td>
-                      <td className="px-4 py-2.5 text-right tabular-nums">{fmtMs(r.latencyMs)}</td>
-                      <td className="px-4 py-2.5 text-right">
-                        {r.status === 'SUCCESS' ? (
-                          <CircleCheck className="ml-auto size-4 text-emerald-600 dark:text-emerald-400" />
-                        ) : (
-                          <span className="inline-flex items-center justify-end gap-1 text-right text-red-600 dark:text-red-400">
-                            <CircleX className="size-4" />
-                            {r.errorMessage ? (r.errorMessage.split('\n')[0] ?? '').slice(0, 60) : 'ERROR'}
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {usage.meta.totalPages > 1 ? (
-              <div className="flex items-center justify-between px-4 sm:px-0">
-                <Button variant="outline" size="sm" disabled={!usage.meta.hasPrev} onClick={() => onPage(page - 1)}>
-                  Anterior
-                </Button>
-                <Button variant="outline" size="sm" disabled={!usage.meta.hasNext} onClick={() => onPage(page + 1)}>
-                  Siguiente
-                </Button>
-              </div>
-            ) : null}
-          </>
+          <DataTable
+            columns={columns}
+            data={usage?.data ?? []}
+            loading={!usage}
+            manualPagination
+            rowCount={usage?.meta.total ?? 0}
+            onPaginationChange={(idx, size) => onPaginationChange(idx + 1, size)}
+          />
         )}
       </CardContent>
     </Card>
