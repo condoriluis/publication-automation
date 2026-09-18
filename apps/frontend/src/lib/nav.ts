@@ -1,4 +1,4 @@
-import { Link2, Users, Megaphone, FileText, MessageCircle, CalendarClock, History, Activity, Bot, LayoutDashboard } from 'lucide-react';
+import { Link2, Users, Megaphone, FileText, MessageCircle, CalendarClock, History, Activity, LayoutDashboard } from 'lucide-react';
 
 export interface NavItem {
   title: string;
@@ -16,7 +16,6 @@ export const mainNav: NavItem[] = [
   { title: 'Calendario', href: '/calendar', icon: CalendarClock },
   { title: 'Historial', href: '/history', icon: History },
   { title: 'Logs', href: '/logs', icon: Activity },
-  { title: 'Inteligencia', href: '/ai', icon: Bot },
 ];
 
 export const bottomNav: NavItem[] = [

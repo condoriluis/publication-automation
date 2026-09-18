@@ -9,15 +9,17 @@ import { Reply, Bot, EyeOff, Eye, Trash2, MessageSquareOff, Loader2, Sparkles, X
 import { type ColumnDef, type Row } from '@tanstack/react-table';
 
 import { api } from '@/lib/api';
-import type { Paginated, CommentDetail, RiskLevel, CommentStatus, CommentClassification } from '@/lib/types';
+import type { CommentAnalysisResult, Paginated, CommentDetail, RiskLevel, CommentStatus, CommentClassification, PageListRow } from '@/lib/types';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { EmptyState } from '@/components/empty-state';
 import { LoadingRows } from '@/components/pagination';
 import { DataTable } from '@/components/ui/data-table';
 import { Message } from '@/components/ui/message';
 import { formatRelative } from '@/lib/utils';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const RISKS: (RiskLevel | '')[] = ['', 'NONE', 'LOW', 'MEDIUM', 'HIGH'];
 const STATUSES: (CommentStatus | '')[] = ['', 'VISIBLE', 'HIDDEN', 'RESPONDED', 'DELETED'];
@@ -154,6 +156,31 @@ function CommentsContent() {
   const [error, setError] = useState<string | null>(null);
   const [suggesting, setSuggesting] = useState<string | null>(null);
 
+  const [pages, setPages] = useState<PageListRow[]>([]);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [pendingPage, setPendingPage] = useState('all');
+  const [analyzing, setAnalyzing] = useState(false);
+
+  // Páginas disponibles para filtrar el análisis masivo de IA
+  useEffect(() => {
+    api
+      .get<Paginated<PageListRow>>('/pages?page=1&limit=100')
+      .then((p) => setPages(p.data))
+      .catch(() => undefined);
+  }, []);
+
+  // Cuenta los comentarios pendientes de análisis (para el badge del botón)
+  const loadPendingCount = useCallback(() => {
+    api
+      .get<Paginated<CommentDetail>>('/comments?needsAnalysis=true&limit=1')
+      .then((data) => setPendingCount(data.meta.total))
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    void loadPendingCount();
+  }, [loadPendingCount]);
+
   const buildQuery = useCallback(() => {
     const params = new URLSearchParams();
     params.set('page', String(page));
@@ -171,9 +198,12 @@ function CommentsContent() {
   const load = useCallback(() => {
     api
       .get<Paginated<CommentDetail>>(buildQuery())
-      .then(setRes)
+      .then((data) => {
+        setRes(data);
+        void loadPendingCount();
+      })
       .catch((e) => setError(e instanceof Error ? e.message : 'No se pudieron cargar los comentarios'));
-  }, [buildQuery]);
+  }, [buildQuery, loadPendingCount]);
 
   useEffect(() => {
     void load();
@@ -249,6 +279,29 @@ function CommentsContent() {
       toast.error(e instanceof Error ? e.message : 'Error al sugerir respuesta');
     } finally {
       setSuggesting(null);
+    }
+  }
+
+  async function analyzePending(e: React.FormEvent) {
+    e.preventDefault();
+    setAnalyzing(true);
+    try {
+      const payload = pendingPage === 'all' ? {} : { pageId: pendingPage };
+      const res = await api.post<{ success: boolean; requested: number; analyzed: CommentAnalysisResult[] }>(
+        '/ai/analyze-pending-comments',
+        payload,
+      );
+      if (res.analyzed.length > 0) {
+        toast.success(`Analizados ${res.analyzed.length} comentario${res.analyzed.length === 1 ? '' : 's'} con IA`);
+      } else {
+        toast.info('No hay comentarios pendientes de análisis');
+      }
+      await loadPendingCount();
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Error al analizar comentarios');
+    } finally {
+      setAnalyzing(false);
     }
   }
 
@@ -353,6 +406,44 @@ function CommentsContent() {
   return (
     <div className="space-y-4">
       <PageHeader title="Comentarios" subtitle="Responde y modera los comentarios de tus páginas" />
+
+      {pendingCount > 0 && (
+        <Card>
+          <form onSubmit={(e) => void analyzePending(e)}>
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <Bot className="size-4 text-[#1877F2]" />
+                Análisis con IA
+                <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-bold text-amber-600 dark:text-amber-400">
+                  {pendingCount} pendiente{pendingCount !== 1 ? 's' : ''}
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-wrap items-center gap-2 pb-3">
+              <p className="text-xs text-foreground/50">
+                Clasificar los comentarios sin analizar por riesgo, sentimiento y acción sugerida.
+              </p>
+              <div className="ml-auto flex flex-wrap items-center gap-2">
+                <Select value={pendingPage} onValueChange={setPendingPage}>
+                  <SelectTrigger className="w-[220px]">
+                    <SelectValue placeholder="Todas las páginas" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas las páginas</SelectItem>
+                    {pages.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button type="submit" size="sm" disabled={analyzing}>
+                  {analyzing ? <Loader2 className="animate-spin" /> : <Sparkles className="size-3.5 text-[#1877F2]" />}
+                  {analyzing ? 'Analizando…' : 'Analizar con IA'}
+                </Button>
+              </div>
+            </CardContent>
+          </form>
+        </Card>
+      )}
 
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="mr-1 text-xs font-medium text-foreground/50">Riesgo:</span>

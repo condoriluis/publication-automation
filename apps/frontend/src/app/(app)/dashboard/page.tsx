@@ -94,7 +94,6 @@ export default function DashboardPage() {
             <ActionRow href="/pages" label="Conectar página" shortLabel="Páginas" />
             <ActionRow href="/campaigns/new" label="Crear campaña" shortLabel="Campaña" />
             <ActionRow href="/posts/new" label="Crear publicación" shortLabel="Publicar" />
-            <ActionRow href="/ai" label="Generar contenido con IA" shortLabel="Contenido IA" />
           </CardContent>
         </Card>
       </div>
