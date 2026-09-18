@@ -29,7 +29,6 @@ export default function NotFound() {
       </div>
 
       <div className="relative z-10 flex w-full max-w-xl animate-fade-up flex-col items-center text-center">
-        {/* Brand */}
         <Link href="/dashboard" className="mb-10 inline-flex items-center gap-2.5">
           <div className="flex size-11 items-center justify-center rounded-2xl bg-[#1877F2] shadow-lg shadow-[#1877F2]/30">
             <MetaLogo className="size-6" />
@@ -39,7 +38,6 @@ export default function NotFound() {
           </span>
         </Link>
 
-        {/* 404 */}
         <p className="text-sm font-semibold uppercase tracking-[0.35em] text-primary">
           Error 404
         </p>
