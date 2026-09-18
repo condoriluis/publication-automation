@@ -20,6 +20,8 @@ export class ScheduledPostPublisherService {
 
   private readonly concurrency: number;
   private readonly maxAttempts: number;
+  /** Evita ticks solapados (mismo patrón que comment-worker/comment-poll). */
+  private running = false;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -34,6 +36,8 @@ export class ScheduledPostPublisherService {
 
   @Interval('scheduled-post-publisher', ScheduledPostPublisherService.INTERVAL_MS)
   async tick(): Promise<void> {
+    if (this.running) return;
+    this.running = true;
     try {
       await this.runOnce();
     } catch (err) {
@@ -42,6 +46,8 @@ export class ScheduledPostPublisherService {
         undefined,
         'ScheduledPostPublisher',
       );
+    } finally {
+      this.running = false;
     }
   }
 

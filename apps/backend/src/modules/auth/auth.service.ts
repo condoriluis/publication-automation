@@ -225,8 +225,16 @@ export class AuthService {
     const valid = await bcrypt.compare(dto.currentPassword, user.passwordHash);
     if (!valid) throw new UnauthorizedException('Contraseña actual incorrecta');
     const passwordHash = await bcrypt.hash(dto.newPassword, this.rounds);
-    await this.prisma.user.update({ where: { id: userId }, data: { passwordHash } });
-    await this.audit('auth.change_password', userId, ctx);
+    const revoked = await this.prisma.$transaction([
+      this.prisma.user.update({ where: { id: userId }, data: { passwordHash } }),
+      this.prisma.refreshToken.updateMany({ where: { userId, revoked: false }, data: { revoked: true } }),
+    ]);
+    await this.audit(
+      'auth.change_password',
+      userId,
+      ctx,
+      { revokedSessions: revoked[1].count },
+    );
     return { success: true };
   }
 

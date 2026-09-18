@@ -42,7 +42,7 @@ export class AIConfigService {
     });
 
     if (row && row.apiKeyEncrypted) {
-      const apiKey = this.crypto.decrypt(row.apiKeyEncrypted);
+      const apiKey = this.crypto.decrypt(row.apiKeyEncrypted, { hexKey: this.appConfig.tokenEncryptionKey });
       if (apiKey) {
         const provider = (row.provider as AiProviderName) in AI_DEFAULT_BASE_URLS
           ? (row.provider as AiProviderName)

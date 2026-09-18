@@ -19,6 +19,8 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:seed": "tsx prisma/seed.ts",
     "prisma:studio": "prisma studio",
+    "encryption:rekey": "tsx scripts/rekey-encryption.ts",
+    "encryption:rekey:dry": "tsx scripts/rekey-encryption.ts --dry-run",
     "lint": "eslint \"src/**/*.ts\"",
     "test": "jest",
     "test:watch": "jest --watch",

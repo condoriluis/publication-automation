@@ -22,10 +22,14 @@ interface GroupRow {
 @Injectable()
 export class CampaignWorkerService {
   private static readonly INTERVAL_MS = 5_000;
+  /** Cuántos posts nuevos materializa cada tick (evita ráfagas de IA/escritura). */
+  private static readonly MAX_POSTS_PER_TICK = 10;
 
   private readonly leaseMs: number;
   private readonly maxAttempts: number;
   private readonly retryBackoffMs: number;
+  /** Evita ticks solapados: un tick que excede el lease no re-clama su propio trabajo. */
+  private running = false;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -41,10 +45,14 @@ export class CampaignWorkerService {
 
   @Interval('campaign-worker', CampaignWorkerService.INTERVAL_MS)
   async tick(): Promise<void> {
+    if (this.running) return;
+    this.running = true;
     try {
       await this.runOnce();
     } catch (err) {
       this.logger.error(`Worker tick falló: ${(err as Error).message}`, undefined, 'CampaignWorker');
+    } finally {
+      this.running = false;
     }
   }
 
@@ -136,6 +144,9 @@ export class CampaignWorkerService {
       this.logger.warn(
         `Grupo ${groupId}: error transitorio en post ${post.id} (intento ${attempts}): ${(err as Error).message}`,
       );
+      if (attempts >= this.maxAttempts) {
+        await this.executor.markCampaignFailure(group.campaignId, 'Demasiados fallos transitorios al publicar');
+      }
       return;
     }
 
@@ -181,17 +192,19 @@ export class CampaignWorkerService {
   // ---------------------------------------------------------------------------
 
   private async ensureGroupPosts(group: GroupRow): Promise<void> {
+    const prefix = `campaign:${group.campaignId}:${group.id}:`;
+    const existingCount = await this.prisma.post.count({
+      where: { pageId: group.campaign.pageId, campaignId: group.campaignId, dedupeKey: { startsWith: prefix } },
+    });
+    if (existingCount >= group.actionsTarget) return;
+
+    // Solo materializa un lote por tick: la publicación ya avanza un post por
+    // tick, así que crear unos pocos por delante evita ráfagas de IA/escritura.
+    const toCreate = Math.min(group.actionsTarget - existingCount, CampaignWorkerService.MAX_POSTS_PER_TICK);
     let created = 0;
 
-    for (let i = 0; i < group.actionsTarget; i++) {
-      const dedupeKey = `campaign:${group.campaignId}:${group.id}:${i}:${group.campaign.pageId}`;
-
-      // Chequear primero si ya existe para no gastar tokens de IA en vano
-      const existing = await this.prisma.post.findFirst({ where: { dedupeKey } });
-      if (existing) {
-        created += 1;
-        continue;
-      }
+    for (let i = existingCount; i < existingCount + toCreate; i++) {
+      const dedupeKey = `${prefix}${i}:${group.campaign.pageId}`;
 
       let content = group.campaign.contentTemplate;
 

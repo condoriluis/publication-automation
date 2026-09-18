@@ -140,6 +140,10 @@ export class UsersService {
         const newRoles = this.resolveRoles(dto.roles.map((r) => r as string));
         await tx.userRole.createMany({ data: newRoles.map((role) => ({ userId: id, role })) });
       }
+      // Si un administrador resetea la contraseña, revocar todas las sesiones activas.
+      if (dto.password) {
+        await tx.refreshToken.updateMany({ where: { userId: id, revoked: false }, data: { revoked: true } });
+      }
       const updated = await tx.user.update({ where: { id }, data, include: { roles: true } });
       return this.toPublic(updated);
     });

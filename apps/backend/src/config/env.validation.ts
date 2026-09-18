@@ -1,7 +1,5 @@
 import { z } from 'zod';
 
-const DEFAULT_DEV_ENCRYPTION_KEY = '0'.repeat(64);
-
 /**
  * Validación estricta de variables de entorno al arrancar.
  * El proceso se detiene temprano si falta o es inválida alguna var crítica.
@@ -43,12 +41,12 @@ const envSchema = z.object({
   // reCAPTCHA (login) — opcional: si no se define, la verificación se omite
   RECAPTCHA_SECRET_KEY: z.string().optional(),
 
-  // Cifrado AES-256-GCM para tokens de terceros (clave HEX de 32 bytes)
-  TOKEN_ENCRYPTION_KEY: z
-    .string()
-    .regex(/^[0-9a-fA-F]{64}$/, 'TOKEN_ENCRYPTION_KEY debe ser un string HEX de 64 caracteres (32 bytes)')
-    .or(z.literal('').transform(() => DEFAULT_DEV_ENCRYPTION_KEY))
-    .default(DEFAULT_DEV_ENCRYPTION_KEY),
+  // Cifrado AES-256-GCM para tokens de terceros (clave HEX de 32 bytes).
+  // Requerida: sin ella el arranque falla (no se permite clave por defecto).
+  TOKEN_ENCRYPTION_KEY: z.string().regex(
+    /^[0-9a-fA-F]{64}$/,
+    'TOKEN_ENCRYPTION_KEY debe ser un string HEX de 64 caracteres (32 bytes)',
+  ),
 
   // Meta / Facebook
   FACEBOOK_APP_ID: z.string().min(1),

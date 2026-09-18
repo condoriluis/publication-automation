@@ -35,8 +35,8 @@ export class AiController {
   @Post('generate-post')
   @Permissions('ai:use')
   @ApiOperation({ summary: 'Genera el texto de una publicación para una página' })
-  async generatePost(@Body() dto: GenerateTextDto): Promise<{ success: boolean; text: string }> {
-    const page = await this.prisma.page.findUnique({ where: { id: dto.pageId } });
+  async generatePost(@Body() dto: GenerateTextDto, @CurrentUser('sub') userId: string): Promise<{ success: boolean; text: string }> {
+    const page = await this.prisma.page.findFirst({ where: { id: dto.pageId, userId } });
     if (!page) {
       throw new NotFoundException('Página no encontrada');
     }
@@ -58,8 +58,8 @@ export class AiController {
   @Post('generate-campaign')
   @Permissions('ai:use')
   @ApiOperation({ summary: 'Genera configuración completa de campaña a partir del título' })
-  async generateCampaign(@Body() dto: GenerateCampaignDto): Promise<{ success: boolean; config: CampaignConfigResult }> {
-    const page = await this.prisma.page.findUnique({ where: { id: dto.pageId } });
+  async generateCampaign(@Body() dto: GenerateCampaignDto, @CurrentUser('sub') userId: string): Promise<{ success: boolean; config: CampaignConfigResult }> {
+    const page = await this.prisma.page.findFirst({ where: { id: dto.pageId, userId } });
     if (!page) {
       throw new NotFoundException('Página no encontrada');
     }
@@ -78,9 +78,9 @@ export class AiController {
   @Post('comment-reply')
   @Permissions('ai:use')
   @ApiOperation({ summary: 'Sugiere una respuesta contextual a un comentario' })
-  async commentReply(@Body() dto: GenerateCommentReplyDto): Promise<{ success: boolean; reply: string }> {
-    const comment = await this.prisma.comment.findUnique({
-      where: { id: dto.commentId },
+  async commentReply(@Body() dto: GenerateCommentReplyDto, @CurrentUser('sub') userId: string): Promise<{ success: boolean; reply: string }> {
+    const comment = await this.prisma.comment.findFirst({
+      where: { id: dto.commentId, page: { userId } },
       include: { post: { include: { page: true } }, page: true },
     });
     if (!comment) {
@@ -112,8 +112,11 @@ export class AiController {
   @Post('analyze-comments')
   @Permissions('ai:use')
   @ApiOperation({ summary: 'Clasifica comentarios por riesgo y tono sin ejecutar acciones' })
-  async analyzeComments(@Body() dto: AnalyzeCommentsDto): Promise<{ success: boolean; results: CommentAnalysisResult[] }> {
-    const results = await this.aiService.analyzeComments(dto.commentIds);
+  async analyzeComments(
+    @Body() dto: AnalyzeCommentsDto,
+    @CurrentUser('sub') userId: string,
+  ): Promise<{ success: boolean; results: CommentAnalysisResult[] }> {
+    const results = await this.aiService.analyzeComments(dto.commentIds, { userId });
     return { success: true, results };
   }
 

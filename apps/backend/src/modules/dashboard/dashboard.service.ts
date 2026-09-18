@@ -101,23 +101,27 @@ export class DashboardService {
     private readonly pagination: PaginationHelper,
   ) {}
 
-  async getSummary(query: SummaryQueryDto): Promise<DashboardSummary> {
+  async getSummary(userId: string, query: SummaryQueryDto): Promise<DashboardSummary> {
     const { page, limit, skip, sortOrder } = this.pagination.parsePageOptions(query as unknown as Record<string, unknown>);
     const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const userScope = { userId };
 
     const [postsPublicados, programados, fallidos, campañasActivas, paginasConectadas, comentariosRecientes, respuestasPendientes] =
       await Promise.all([
-        this.prisma.post.count({ where: { status: 'PUBLISHED' } }),
-        this.prisma.post.count({ where: { status: 'SCHEDULED' } }),
-        this.prisma.post.count({ where: { status: 'FAILED' } }),
-        this.prisma.campaign.count({ where: { status: { in: ['RUNNING', 'SCHEDULED'] } } }),
-        this.prisma.page.count({ where: { status: 'ACTIVE' } }),
-        this.prisma.comment.count({ where: { createdAt: { gte: since24h } } }),
-        this.prisma.comment.count({ where: { status: 'VISIBLE', isFromPage: false } }),
+        this.prisma.post.count({ where: { ...userScope, status: 'PUBLISHED' } }),
+        this.prisma.post.count({ where: { ...userScope, status: 'SCHEDULED' } }),
+        this.prisma.post.count({ where: { ...userScope, status: 'FAILED' } }),
+        this.prisma.campaign.count({ where: { ...userScope, status: { in: ['RUNNING', 'SCHEDULED'] } } }),
+        this.prisma.page.count({ where: { ...userScope, status: 'ACTIVE' } }),
+        this.prisma.comment.count({ where: { createdAt: { gte: since24h }, page: { userId } } }),
+        this.prisma.comment.count({ where: { status: 'VISIBLE', isFromPage: false, page: { userId } } }),
       ]);
+
+    const userAudit = { userId };
 
     const [activity, total] = await Promise.all([
       this.prisma.auditLog.findMany({
+        where: userAudit,
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
@@ -133,7 +137,7 @@ export class DashboardService {
           user: { select: { displayName: true, email: true } },
         },
       }),
-      this.prisma.auditLog.count({}),
+      this.prisma.auditLog.count({ where: userAudit }),
     ]);
 
     return {
@@ -150,7 +154,7 @@ export class DashboardService {
     };
   }
 
-  async getEngagementSeries(query: EngagementQueryDto): Promise<EngagementSeries> {
+  async getEngagementSeries(userId: string, query: EngagementQueryDto): Promise<EngagementSeries> {
     const range = query.range ?? '7d';
     const days = range === '30d' ? 30 : 7;
     const to = new Date();
@@ -158,12 +162,8 @@ export class DashboardService {
     const from = new Date(to.getTime() - (days - 1) * 24 * 60 * 60 * 1000);
     from.setHours(0, 0, 0, 0);
 
-    const engagementPageScope = query.pageId
-      ? Prisma.sql`AND p."pageId" = ${query.pageId}`
-      : Prisma.empty;
-    const metricPageScope = query.pageId
-      ? Prisma.sql`AND pm."pageId" = ${query.pageId}`
-      : Prisma.empty;
+    const pageIdClause = query.pageId ? Prisma.sql`AND p."pageId" = ${query.pageId}` : Prisma.empty;
+    const metricPageIdClause = query.pageId ? Prisma.sql`AND pm."pageId" = ${query.pageId}` : Prisma.empty;
 
     const engagementRows = await this.prisma.$queryRaw<EngagementRow[]>`
       SELECT DATE(e."measuredAt") AS day,
@@ -177,7 +177,8 @@ export class DashboardService {
       INNER JOIN "Post" p ON p.id = e."postId"
       WHERE e."measuredAt" >= ${from}
         AND e."measuredAt" <= ${to}
-        ${engagementPageScope}
+        AND p."userId" = ${userId}
+        ${pageIdClause}
       GROUP BY DATE(e."measuredAt")
       ORDER BY DATE(e."measuredAt") ASC
     `;
@@ -192,7 +193,8 @@ export class DashboardService {
       FROM "PageMetric" pm
       WHERE pm."measuredAt" >= ${from}
         AND pm."measuredAt" <= ${to}
-        ${metricPageScope}
+        AND pm."pageId" IN (SELECT p2."id" FROM "Page" p2 WHERE p2."userId" = ${userId})
+        ${metricPageIdClause}
       GROUP BY DATE(pm."measuredAt")
       ORDER BY DATE(pm."measuredAt") ASC
     `;

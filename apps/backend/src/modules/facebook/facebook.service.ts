@@ -142,6 +142,11 @@ export class FacebookService {
   /** Estados OAuth emitidos en /oauth/url (CSRF de un solo uso con TTL). */
   private readonly pendingOAuthStates = new Map<string, number>();
 
+  /** Clave maestra AES-256-GCM (TOKEN_ENCRYPTION_KEY) para cifrado en reposo. */
+  private get encKey(): { hexKey: string } {
+    return { hexKey: this.config.tokenEncryptionKey };
+  }
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
@@ -363,7 +368,7 @@ export class FacebookService {
       });
     }
 
-    const accessTokenEncrypted = this.crypto.encrypt(accessToken);
+    const accessTokenEncrypted = this.crypto.encrypt(accessToken, this.encKey);
     const tokenExpiresAt =
       debug.expires_at && debug.expires_at > 0
         ? new Date(debug.expires_at * 1000)
@@ -437,7 +442,7 @@ export class FacebookService {
     }
 
     try {
-      const token = this.crypto.decrypt(account.accessTokenEncrypted);
+      const token = this.crypto.decrypt(account.accessTokenEncrypted, this.encKey);
       // La API de Meta requiere DELETE /{userId}/permissions para revocar todos los permisos
       await this.request('DELETE', `/${account.facebookUserId}/permissions`, {
         params: { access_token: token },
@@ -486,7 +491,7 @@ export class FacebookService {
     });
 
     for (const meta of metaPages) {
-      const pageTokenEncrypted = meta.access_token ? this.crypto.encrypt(meta.access_token) : undefined;
+      const pageTokenEncrypted = meta.access_token ? this.crypto.encrypt(meta.access_token, this.encKey) : undefined;
       await this.prisma.page.upsert({
         where: { accountId_facebookPageId: { accountId, facebookPageId: meta.id } },
         create: {
@@ -556,7 +561,7 @@ export class FacebookService {
   private async enrichAccountProfile(account: FacebookAccount): Promise<FacebookAccount> {
     if (account.pictureUrl) return account;
     try {
-      const token = this.crypto.decrypt(account.accessTokenEncrypted);
+      const token = this.crypto.decrypt(account.accessTokenEncrypted, this.encKey);
       if (!token?.trim()) return account;
       const me = await this.getMe(token);
       if (me?.id && me.id !== account.facebookUserId) return account;
@@ -595,7 +600,7 @@ export class FacebookService {
         body: { code: 200, type: 'OAuthException', message: `La página está en estado ${page.status}` },
       });
     }
-    const token = this.crypto.decrypt(page.accessTokenEncrypted);
+    const token = this.crypto.decrypt(page.accessTokenEncrypted, this.encKey);
     if (!token?.trim()) {
       throw new FacebookGraphError('La página no tiene token de acceso válido', {
         body: { code: 190, type: 'OAuthException', message: 'Sin token de acceso' },

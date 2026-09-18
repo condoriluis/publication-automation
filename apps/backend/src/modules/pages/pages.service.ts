@@ -3,9 +3,9 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { Page, Prisma } from '@prisma/client';
 
+import { AppConfigService } from '../../config/app-config.service';
 import { CryptoService } from '../../common/crypto/crypto.service';
 import { AppLogger } from '../../common/logger/app-logger.service';
 import { PaginationHelper, Paginated } from '../../common/pagination/pagination.helper';
@@ -63,7 +63,7 @@ export class PagesService {
     private readonly facebook: FacebookService,
     private readonly pagination: PaginationHelper,
     private readonly logger: AppLogger,
-    private readonly env: ConfigService,
+    private readonly config: AppConfigService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -353,10 +353,10 @@ export class PagesService {
   }
 
   private encryptToken(token: string): string {
-    return this.crypto.encrypt(token, { hexKey: this.env.get<string>('TOKEN_ENCRYPTION_KEY') });
+    return this.crypto.encrypt(token, { hexKey: this.config.tokenEncryptionKey });
   }
 
   private decryptToken(payload: string): string {
-    return this.crypto.decrypt(payload, { hexKey: this.env.get<string>('TOKEN_ENCRYPTION_KEY') });
+    return this.crypto.decrypt(payload, { hexKey: this.config.tokenEncryptionKey });
   }
 }

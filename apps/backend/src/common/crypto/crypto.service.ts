@@ -9,20 +9,19 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes, createHmac, 
  */
 @Injectable()
 export class CryptoService {
-  /** Deriva la key de 32B desde TOKEN_ENCRYPTION_KEY/TOKEN_ENCRYPTION_KEY_HEX */
-  private keyFor(basis: string | undefined, hex: string | undefined): Buffer {
-    if (hex) return Buffer.from(hex, 'hex');
-    if (basis) {
-      const key = createHash('sha256').update(basis).digest();
-      return Buffer.from(key);
-    }
-    // Fallback seguro para desarrollo local (no apto para producción):
-    return Buffer.from('pa-dev-key-change-me-32b-security', 'utf8').subarray(0, 32);
+  /**
+   * Deriva la key de 32B desde TOKEN_ENCRYPTION_KEY.
+   * Falla de forma ruidosa si la clave no se provee: nunca se cifra con
+   * material no configurado (una clave pública conocida no protege nada).
+   */
+  private keyFor(hexKey: string | undefined): Buffer {
+    if (hexKey) return Buffer.from(hexKey, 'hex');
+    throw new Error('Clave de cifrado no configurada: pasa hexKey a encrypt/decrypt');
   }
 
-  encrypt(plainText: string, opts?: { basis?: string; hexKey?: string }): string {
+  encrypt(plainText: string, opts?: { hexKey?: string }): string {
     if (!plainText) return plainText;
-    const key = this.keyFor(opts?.basis, opts?.hexKey);
+    const key = this.keyFor(opts?.hexKey);
     const iv = randomBytes(12);
     const cipher = createCipheriv('aes-256-gcm', key, iv);
     const encrypted = Buffer.concat([cipher.update(plainText, 'utf8'), cipher.final()]);
@@ -30,14 +29,14 @@ export class CryptoService {
     return `v1:${iv.toString('base64url')}:${tag.toString('base64url')}:${encrypted.toString('base64url')}`;
   }
 
-  decrypt(payload: string, opts?: { basis?: string; hexKey?: string }): string {
+  decrypt(payload: string, opts?: { hexKey?: string }): string {
     if (!payload) return payload;
     const parts = payload.split(':');
     if (parts.length !== 4 || parts[0] !== 'v1') {
       throw new Error('Payload cifrado con formato inválido');
     }
     const [, ivB64, tagB64, dataB64] = parts;
-    const key = this.keyFor(opts?.basis, opts?.hexKey);
+    const key = this.keyFor(opts?.hexKey);
     const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(ivB64, 'base64url'));
     decipher.setAuthTag(Buffer.from(tagB64, 'base64url'));
     const decrypted = Buffer.concat([

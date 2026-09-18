@@ -116,16 +116,26 @@ export class CommentAutomationService {
 
   private async executeRule(
     commentId: string,
-    comment: { id: string; postId: string; pageId: string; metaCommentId: string; fromName: string | null; status: CommentStatus; message: string },
+    comment: { id: string; postId: string; pageId: string; metaCommentId: string; fromName: string | null; status: CommentStatus; message: string; needsReview: boolean; analyzedAt: Date | null },
     rule: { id: string; action: CommentRuleAction; replyTemplate: string | null; name: string },
     settings: Record<string, unknown>,
   ): Promise<void> {
     switch (rule.action) {
       case 'REPLY':
-        return this.executeReply(comment, rule, settings);
       case 'HIDE':
-        return this.executeHide(comment);
       case 'DELETE':
+        // Gate de revisión: las acciones con efecto público solo se ejecutan
+        // sobre comentarios analizados y sin revisión pendiente. Si el LLM no
+        // está seguro o el comentario no se analizó, se deja para revisión manual.
+        if (comment.analyzedAt === null || comment.needsReview) {
+          this.logger.debug(
+            `Acción ${rule.action} bloqueada para ${comment.id}: requiere revisión humana`,
+            'CommentAutomation',
+          );
+          return;
+        }
+        if (rule.action === 'REPLY') return this.executeReply(comment, rule, settings);
+        if (rule.action === 'HIDE') return this.executeHide(comment);
         return this.executeDelete(comment);
       case 'FLAG_REVIEW':
         return this.executeFlagReview(commentId, comment);
