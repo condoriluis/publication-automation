@@ -117,6 +117,7 @@ export class CampaignsService implements OnModuleInit {
     const where: Prisma.CampaignWhereInput = {
       userId,
       ...(query.status ? { status: query.status } : {}),
+      ...(query.statuses ? { status: { in: query.statuses.split(',') as CampaignStatus[] } } : {}),
       ...(query.pageId ? { pageId: query.pageId } : {}),
       ...(query.search ? { name: { contains: query.search } } : {}),
     };

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Loader2, Sparkles } from 'lucide-react';
@@ -38,17 +38,33 @@ export default function NewPostPage() {
   });
 
   useEffect(() => {
-    Promise.all([api.get<Paginated<PageListRow>>('/pages?page=1&limit=100'), api.get<Paginated<Campaign>>('/campaigns?page=1&limit=100')])
-      .then(([p, c]) => {
+    api
+      .get<Paginated<PageListRow>>('/pages?page=1&limit=100')
+      .then((p) => {
         setPages(p);
-        setCampaigns(c.data);
         const first = p.data[0];
         if (first) setForm((f) => ({ ...f, pageId: first.id }));
       })
       .catch(() => setPages({ data: [], meta: { page: 1, limit: 100, total: 0, totalPages: 0, hasNext: false, hasPrev: false } }));
   }, []);
 
-  const pageCampaigns = campaigns.filter((c) => c.pageId === form.pageId && ['DRAFT', 'SCHEDULED', 'RUNNING', 'PAUSED'].includes(c.status));
+  const campaignReqId = useRef(0);
+
+  const loadCampaigns = useCallback((pageId: string) => {
+    const reqId = ++campaignReqId.current;
+    api
+      .get<Paginated<Campaign>>(`/campaigns?page=1&limit=100&pageId=${encodeURIComponent(pageId)}&statuses=DRAFT,SCHEDULED,RUNNING,PAUSED`)
+      .then((res) => {
+        if (reqId === campaignReqId.current) setCampaigns(res.data);
+      })
+      .catch(() => {
+        if (reqId === campaignReqId.current) setCampaigns([]);
+      });
+  }, []);
+
+  useEffect(() => {
+    if (form.pageId) loadCampaigns(form.pageId);
+  }, [form.pageId, loadCampaigns]);
 
   async function generate() {
     if (!form.pageId) return toast.error('Selecciona una página primero');
@@ -129,7 +145,7 @@ export default function NewPostPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">Sin campaña</SelectItem>
-                    {pageCampaigns.map((c) => (
+                    {campaigns.map((c) => (
                       <SelectItem key={c.id} value={c.id}>
                         {c.name}
                       </SelectItem>
