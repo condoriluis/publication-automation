@@ -1,17 +1,39 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Sparkles, KeyRound, Zap, Loader2, ShieldCheck, CircleCheck, CircleX } from 'lucide-react';
+import {
+  Sparkles,
+  KeyRound,
+  Zap,
+  Loader2,
+  CircleCheck,
+  CircleX,
+  SlidersHorizontal,
+  RotateCcw,
+  Lock,
+  BookOpenCheck,
+} from 'lucide-react';
 import { toast } from 'sonner';
 
 import { api } from '@/lib/api';
-import type { AiConfigTestResult, AiConfigView, AiUsageRow, AiUsageSummaryRow, Paginated, UpdateAiConfigPayload } from '@/lib/types';
+import type {
+  AiConfigTestResult,
+  AiConfigView,
+  AiPromptFeature,
+  AiUsageRow,
+  AiUsageSummaryRow,
+  Paginated,
+  PromptTemplateView,
+  UpdateAiConfigPayload,
+  UpdatePromptPayload,
+} from '@/lib/types';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuthAdmin } from '@/contexts/auth-context';
@@ -38,6 +60,39 @@ const FEATURE_LABELS: Record<string, string> = {
   chat: 'Chat',
 };
 
+const PROMPT_FEATURES: { value: AiPromptFeature; label: string; description: string }[] = [
+  {
+    value: 'generate_post',
+    label: 'Publicaciones en la página',
+    description: 'El texto de los posts que creas desde el panel.',
+  },
+  {
+    value: 'generate_campaign',
+    label: 'Campañas',
+    description: 'El contenido inicial (descripción, plantilla del post e intervalo) de una campaña.',
+  },
+  {
+    value: 'comment_reply',
+    label: 'Respuestas a comentarios',
+    description: 'La respuesta sugerida cuando respondes un comentario de forma manual.',
+  },
+  {
+    value: 'generate_reply',
+    label: 'Respuestas automáticas',
+    description: 'Las respuestas que las tareas automáticas publican solas cuando corresponde.',
+  },
+  {
+    value: 'analyze_comment',
+    label: 'Análisis de comentarios',
+    description: 'Clasifica cada comentario (riesgo, si pregunta o si quiere comprar) para gestionarlo mejor.',
+  },
+  {
+    value: 'moderate_comment',
+    label: 'Moderación de comentarios',
+    description: 'Sugiere si un comentario debe responderse, ocultarse o eliminarse.',
+  },
+];
+
 function fmt(n: number): string {
   return n.toLocaleString('es');
 }
@@ -51,6 +106,7 @@ export default function AiConfigPage() {
   const canManage = Boolean(user?.roles.some((r) => r === 'ADMIN' || r === 'MANAGER'));
 
   const [config, setConfig] = useState<AiConfigView | null>(null);
+  const [prompts, setPrompts] = useState<PromptTemplateView[] | null>(null);
   const [summary, setSummary] = useState<AiUsageSummaryRow[]>([]);
   const [usage, setUsage] = useState<Paginated<AiUsageRow> | null>(null);
   const [usagePage, setUsagePage] = useState(1);
@@ -58,12 +114,20 @@ export default function AiConfigPage() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
 
+  const [selectedFeature, setSelectedFeature] = useState<AiPromptFeature>('generate_post');
+
+  const selectedView = prompts?.find((p) => p.feature === selectedFeature) ?? null;
+
   useEffect(() => {
     if (!canManage) return;
     api
       .get<AiConfigView>('/ai/config')
       .then(setConfig)
       .catch((e) => toast.error(e instanceof Error ? e.message : 'No se pudo cargar la configuración de IA'));
+    api
+      .get<PromptTemplateView[]>('/ai/prompts')
+      .then(setPrompts)
+      .catch(() => undefined);
     api
       .get<AiUsageSummaryRow[]>('/ai/usage/summary')
       .then(setSummary)
@@ -78,16 +142,34 @@ export default function AiConfigPage() {
       .catch(() => undefined);
   }, [canManage, usagePage]);
 
-  async function save(dto: UpdateAiConfigPayload): Promise<void> {
+  if (!canManage) {
+    return (
+      <div className="space-y-6">
+        No tienes permisos ({user?.displayName ?? '…'}) para ver esta página. Solo Administradores y Managers.
+      </div>
+    );
+  }
+
+  async function saveConfig(dto: UpdateAiConfigPayload): Promise<void> {
     setSaving(true);
     try {
       const updated = await api.patch<AiConfigView>('/ai/config', dto);
       setConfig(updated);
-      toast.success('Configuración de IA guardada');
+      toast.success('Configuración de proveedor guardada');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Error al guardar la configuración');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function saveGlobalInstructions(systemPrompt: string): Promise<void> {
+    try {
+      const updated = await api.patch<AiConfigView>('/ai/config', { systemPrompt });
+      setConfig(updated);
+      toast.success('Instrucciones generales guardadas');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Error al guardar las instrucciones');
     }
   }
 
@@ -104,42 +186,63 @@ export default function AiConfigPage() {
     }
   }
 
-  if (!canManage) {
-    return <div className="space-y-6">No tienes permisos ({user?.displayName ?? '…'}) para ver esta página. Solo Administradores y Managers.</div>;
+  async function savePrompt(feature: AiPromptFeature, dto: UpdatePromptPayload): Promise<void> {
+    try {
+      const updated = await api.patch<PromptTemplateView>(`/ai/prompts/${feature}`, dto);
+      setPrompts((prev) => prev?.map((p) => (p.feature === feature ? updated : p)) ?? [updated]);
+      setSelectedFeature(feature);
+      toast.success('Prompt actualizado');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Error al guardar el prompt');
+    }
+  }
+
+  async function restorePrompt(feature: AiPromptFeature): Promise<void> {
+    try {
+      const updated = await api.post<PromptTemplateView>(`/ai/prompts/${feature}/restore`, {});
+      setPrompts((prev) => prev?.map((p) => (p.feature === feature ? updated : p)) ?? [updated]);
+      toast.success('Prompt restaurado a los valores por defecto');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Error al restaurar el prompt');
+    }
   }
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="IA · Gestión"
-        subtitle="Proveedor, modelo y consumo real de tokens por llamada"
-      >
-        {config ? (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-[#1877F2]/10 px-3 py-1 text-xs font-medium text-[#1877F2] dark:text-[#5899f3]">
-            <ShieldCheck className="size-3.5" />
-            API key cifrada (AES-256-GCM)
-          </span>
-        ) : null}
-      </PageHeader>
+        subtitle="Proveedor y modelo, instrucciones de la IA y consumo real de tokens"
+      />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <ConfigCard
-          key={config ? `${config.provider}:${config.model}:${config.temperature}` : 'loading'}
+          key={`${config?.provider ?? 'loading'}:${config?.model ?? ''}`}
           config={config}
           saving={saving}
           testing={testing}
-          onSave={save}
+          onSave={saveConfig}
           onTest={testConnection}
         />
         <SummaryCard summary={summary} />
       </div>
+
+      <GlobalInstructionsCard key={config?.systemPrompt ?? 'loading'} initialValue={config?.systemPrompt ?? ''} onSave={saveGlobalInstructions} />
+
+      <PromptsCard
+        features={PROMPT_FEATURES}
+        selectedFeature={selectedFeature}
+        onSelectFeature={setSelectedFeature}
+        view={selectedView}
+        onSave={savePrompt}
+        onRestore={restorePrompt}
+      />
 
       <ActivityCard usage={usage} page={usagePage} onPage={setUsagePage} />
     </div>
   );
 }
 
-/* ── Configuración activa ─────────────────────────────────────────────────── */
+/* ── Configuración del proveedor ──────────────────────────────────────────── */
 function ConfigCard({
   config,
   saving,
@@ -156,9 +259,6 @@ function ConfigCard({
   const [provider, setProvider] = useState<string>(() => config?.provider ?? 'openai');
   const [model, setModel] = useState<string>(() => config?.model ?? '');
   const [baseUrl, setBaseUrl] = useState<string>(() => (config?.usesDefaultBaseUrl ? '' : (config?.baseUrl ?? '')));
-  const [temperature, setTemperature] = useState<string>(() => String(config?.temperature ?? 0.7));
-  const [maxTokens, setMaxTokens] = useState<string>(() => String(config?.maxTokens ?? 1024));
-  const [systemPrompt, setSystemPrompt] = useState<string>(() => config?.systemPrompt ?? '');
   const [apiKey, setApiKey] = useState('');
 
   return (
@@ -206,43 +306,6 @@ function ConfigCard({
           />
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label htmlFor="temperature">Temperatura (0–2)</Label>
-            <Input
-              id="temperature"
-              type="number"
-              step="0.1"
-              min={0}
-              max={2}
-              value={temperature}
-              onChange={(e) => setTemperature(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="maxTokens">Máx. tokens de salida</Label>
-            <Input
-              id="maxTokens"
-              type="number"
-              min={1}
-              max={65536}
-              value={maxTokens}
-              onChange={(e) => setMaxTokens(e.target.value)}
-            />
-          </div>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="systemPrompt">Prompt de sistema</Label>
-          <Textarea
-            id="systemPrompt"
-            value={systemPrompt}
-            onChange={(e) => setSystemPrompt(e.target.value)}
-            rows={3}
-            placeholder="Instrucciones base para el modelo"
-          />
-        </div>
-
         <div className="space-y-1.5">
           <Label htmlFor="apiKey">API key (déjalo vacío para conservar la actual)</Label>
           <Input
@@ -250,7 +313,7 @@ function ConfigCard({
             type="password"
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
-            placeholder="Se almacena cifrada (AES-256-GCM)"
+            placeholder="Nueva API key del proveedor (vacío = conservar la actual)"
             autoComplete="off"
           />
         </div>
@@ -274,9 +337,6 @@ function ConfigCard({
               provider,
               model: model.trim(),
               baseUrl: baseUrl.trim(),
-              temperature: Number(temperature),
-              maxTokens: Number(maxTokens),
-              systemPrompt,
               apiKey: apiKey.trim(),
             })}
             className="bg-[#1877F2] hover:bg-[#0A5BC4] text-white shadow-sm"
@@ -285,6 +345,238 @@ function ConfigCard({
             Guardar configuración
           </Button>
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ── Instrucciones generales opcionales ───────────────────────────────────── */
+function GlobalInstructionsCard({
+  initialValue,
+  onSave,
+}: {
+  initialValue: string;
+  onSave: (systemPrompt: string) => Promise<void>;
+}) {
+  const [value, setValue] = useState(initialValue);
+  const [saving, setSaving] = useState(false);
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between space-x-2">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <BookOpenCheck className="size-4 text-[#1877F2]" />
+          Instrucciones generales (opcional)
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-sm text-foreground/60">
+          Un texto corto que se aplica a <strong>todas</strong> las funciones, por ejemplo el tono o la voz de tu
+          marca. Si no sabes qué escribir, déjalo vacío: no es obligatorio.
+        </p>
+        <Textarea
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          rows={3}
+          placeholder="P. ej.: Habla siempre en tono cercano y con la voz de «Mi Negocio»."
+        />
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            type="button"
+            size="sm"
+            disabled={saving || value.trim() === initialValue.trim()}
+            onClick={() => {
+              setSaving(true);
+              void onSave(value.trim()).finally(() => setSaving(false));
+            }}
+            className="bg-[#1877F2] hover:bg-[#0A5BC4] text-white shadow-sm"
+          >
+            {saving ? <Loader2 className="animate-spin" /> : <BookOpenCheck className="size-3.5" />}
+            Guardar instrucciones
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ── Prompts por función ──────────────────────────────────────────────────── */
+function PromptsCard({
+  features,
+  selectedFeature,
+  onSelectFeature,
+  view,
+  onSave,
+  onRestore,
+}: {
+  features: { value: AiPromptFeature; label: string; description: string }[];
+  selectedFeature: AiPromptFeature;
+  onSelectFeature: (f: AiPromptFeature) => void;
+  view: PromptTemplateView | null;
+  onSave: (feature: AiPromptFeature, dto: UpdatePromptPayload) => Promise<void>;
+  onRestore: (feature: AiPromptFeature) => Promise<void>;
+}) {
+  const featureMeta = features.find((f) => f.value === selectedFeature) ?? features[0];
+  const [systemPrompt, setSystemPrompt] = useState(() => view?.systemPrompt ?? '');
+  const [temperature, setTemperature] = useState<string>(() => String(view?.effectiveTemperature ?? 0.7));
+  const [maxTokens, setMaxTokens] = useState<string>(() => String(view?.effectiveMaxTokens ?? 1024));
+  const [saving, setSaving] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+
+  function resetEditor(next: PromptTemplateView | null) {
+    setSystemPrompt(next?.systemPrompt ?? '');
+    setTemperature(String(next?.effectiveTemperature ?? 0.7));
+    setMaxTokens(String(next?.effectiveMaxTokens ?? 1024));
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <SlidersHorizontal className="size-4 text-[#1877F2]" />
+          Cómo se comporta la IA en cada función
+        </CardTitle>
+        <p className="text-sm text-foreground/60">
+          Las instrucciones de cada función son opcionales: si no editas nada, funcionan los valores recomendados.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="prompt-feature">Función</Label>
+          <Select
+            value={selectedFeature}
+            onValueChange={(v) => {
+              resetEditor(null);
+              onSelectFeature(v as AiPromptFeature);
+            }}
+          >
+            <SelectTrigger id="prompt-feature" className="max-w-md">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {features.map((f) => (
+                <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-foreground/50">{featureMeta?.description}</p>
+        </div>
+
+        {!view ? (
+          <div className="space-y-2">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-10" />
+            ))}
+          </div>
+        ) : (
+          <div
+            key={`${view.feature}:${view.version}`}
+            className="space-y-4 rounded-lg border p-4"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-xs text-foreground/50">
+                <Badge variant="secondary">v{view.version}</Badge>
+                <span>{view.isDefault ? 'Usa los valores por defecto' : 'Personalizado'}</span>
+                {view.updatedAt ? <span>· editado {formatRelative(view.updatedAt)}</span> : null}
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="prompt-text">Instrucciones para esta función</Label>
+              <Textarea
+                id="prompt-text"
+                value={systemPrompt}
+                onChange={(e) => setSystemPrompt(e.target.value)}
+                rows={10}
+                placeholder="Describe cómo quieres que escriba la IA en esta función…"
+              />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="prompt-temperature">Creatividad (temperatura 0–2)</Label>
+                <Input
+                  id="prompt-temperature"
+                  type="number"
+                  step="0.1"
+                  min={0}
+                  max={2}
+                  value={temperature}
+                  onChange={(e) => setTemperature(e.target.value)}
+                />
+                <p className="text-xs text-foreground/50">
+                  Baja (0) = siempre igual y preciso · Alta (2) = más variado y creativo.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="prompt-maxTokens">Límite de escritura (tokens de salida)</Label>
+                <Input
+                  id="prompt-maxTokens"
+                  type="number"
+                  min={1}
+                  max={65536}
+                  value={maxTokens}
+                  onChange={(e) => setMaxTokens(e.target.value)}
+                />
+                <p className="text-xs text-foreground/50">
+                  Cuánto texto puede escribir como máximo. Un post largo usa unos 1000.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-start justify-between gap-3 pt-1">
+              <p className="flex max-w-xl items-start gap-1.5 text-xs text-foreground/50">
+                <Lock className="mt-0.5 size-3.5 shrink-0" />
+                La aplicación añade automáticamente los datos de tu página, el tema y un bloque de seguridad que no
+                puede editarse, para proteger tu información y cumplir las normas de Meta.
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={restoring || saving}
+                  onClick={() => {
+                    setRestoring(true);
+                    void onRestore(selectedFeature)
+                      .then(() => resetEditor(view))
+                      .finally(() => setRestoring(false));
+                  }}
+                >
+                  {restoring ? <Loader2 className="animate-spin" /> : <RotateCcw className="size-3.5" />}
+                  Restaurar por defecto
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={saving}
+                  onClick={() => {
+                    const temp = Number(temperature);
+                    const max = Number(maxTokens);
+                    if (!Number.isFinite(temp) || temp < 0 || temp > 2) {
+                      toast.error('La creatividad debe ser un número entre 0 y 2');
+                      return;
+                    }
+                    if (!Number.isInteger(max) || max < 1 || max > 65536) {
+                      toast.error('El límite de escritura debe ser un número entre 1 y 65536');
+                      return;
+                    }
+                    setSaving(true);
+                    void onSave(selectedFeature, {
+                      systemPrompt,
+                      temperature: temp,
+                      maxTokens: max,
+                    }).finally(() => setSaving(false));
+                  }}
+                  className="bg-[#1877F2] hover:bg-[#0A5BC4] text-white shadow-sm"
+                >
+                  {saving ? <Loader2 className="animate-spin" /> : <SlidersHorizontal className="size-3.5" />}
+                  Guardar
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

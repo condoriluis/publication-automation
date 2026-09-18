@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -41,9 +41,9 @@ interface TutorialStep {
   urlLabel?: string;
 }
 
-function buildSteps(cfg: FacebookPublicConfig): TutorialStep[] {
-  const host = typeof window !== 'undefined' ? window.location.host : '';
-  const privacyUrl = typeof window !== 'undefined' ? new URL('/privacy', window.location.origin).toString() : 'https://automation-fb.vercel.app/privacy';
+function buildSteps(cfg: FacebookPublicConfig, origin: string): TutorialStep[] {
+  const host = new URL(origin).host;
+  const privacyUrl = `${origin}/privacy`;
   const useCasesUrl = `https://developers.facebook.com/apps/${cfg.appId}/use_cases`;
   const appSettingsUrl = `https://developers.facebook.com/apps/${cfg.appId}/settings/`;
   const businessLoginUrl = `https://developers.facebook.com/apps/${cfg.appId}/business-login/settings/`;
@@ -211,6 +211,15 @@ export function TutorialFacebookGuide({ open, onClose }: { open: boolean; onClos
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // El origin real solo existe en el cliente; el servidor y la hidratación usan
+  // la misma snapshot (URL pública) y tras hidratar se lee window.location.origin
+  // (evita #418/#425 por discrepancias de origen).
+  const origin = useSyncExternalStore(
+    () => () => {},
+    () => window.location.origin,
+    () => 'https://automation-fb.vercel.app',
+  );
+
   const fetchConfig = useCallback(() => {
     return api
       .get<FacebookPublicConfig>('/facebook/config', { auth: false })
@@ -240,7 +249,7 @@ export function TutorialFacebookGuide({ open, onClose }: { open: boolean; onClos
     void fetchConfig().finally(() => setLoading(false));
   };
 
-  const steps = config ? buildSteps(config) : null;
+  const steps = config ? buildSteps(config, origin) : null;
   const step = steps?.[current] as TutorialStep | undefined;
   const isFirst = current === 0;
   const isLast = step ? current === steps!.length - 1 : false;

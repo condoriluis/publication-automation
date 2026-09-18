@@ -531,6 +531,19 @@ model AIConfig {
   updatedAt   DateTime @updatedAt
 }
 
+/// Plantilla de prompt editable por función. temperature/maxTokens null = heredar los valores globales de AIConfig.
+model PromptTemplate {
+  id           String   @id @default(cuid())
+  feature      String   @unique
+  systemPrompt String
+  temperature  Float?
+  maxTokens    Int?
+  version      Int      @default(1)
+  isDefault    Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
 /// Uso real de la IA por llamada (tokens, latencia y estado por proveedor/modelo).
 model AiUsage {
   id           String   @id @default(cuid())
@@ -542,6 +555,8 @@ model AiUsage {
   outputTokens Int      @default(0)
   latencyMs    Int      @default(0)
   errorMessage String?
+  /// Versión del PromptTemplate usado (null para llamadas sin plantilla, p. ej. test de conexión).
+  promptVersion Int?
   createdAt    DateTime @default(now())
 
   @@index([createdAt])

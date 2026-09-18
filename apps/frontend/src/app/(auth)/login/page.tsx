@@ -19,6 +19,18 @@ import { MetaLogo } from '@/components/meta-logo';
 const REMEMBER_KEY = 'pa.rememberedEmail';
 const RECAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY ?? '';
 
+/* Almacenamiento solo-cliente: servidor y hidratación usan la misma snapshot
+   (null); tras hidratar se lee el valor real sin romper el SSR (evita #418). */
+const subscribe = () => () => {};
+
+function getSavedEmail(): string | null {
+  try {
+    return localStorage.getItem(REMEMBER_KEY);
+  } catch {
+    return null;
+  }
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const { login } = useAuthAdmin();
@@ -27,15 +39,13 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = React.useState(false);
   const [form, setForm] = React.useState({ email: '', password: '' });
 
-  /* Email recordado: se hidrata tras el primer render (evita romper SSR). */
-  const [emailLoaded, setEmailLoaded] = React.useState(false);
-  if (!emailLoaded && typeof window !== 'undefined') {
-    const saved = localStorage.getItem(REMEMBER_KEY);
-    setEmailLoaded(true);
-    if (saved) {
-      setRememberMe(true);
-      setForm((f) => ({ ...f, email: saved }));
-    }
+  /* Correo recordado: se aplica cuando el cliente ya conoce localStorage. */
+  const savedEmail = React.useSyncExternalStore(subscribe, getSavedEmail, () => null);
+  const [emailApplied, setEmailApplied] = React.useState(false);
+  if (!emailApplied && savedEmail) {
+    setEmailApplied(true);
+    setRememberMe(true);
+    setForm((f) => ({ ...f, email: savedEmail }));
   }
 
   /* --- reCAPTCHA v2: token + reset controlado por el padre --- */

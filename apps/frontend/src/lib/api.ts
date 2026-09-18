@@ -33,6 +33,7 @@ export function saveTokens(access: string, refresh?: string): void {
   setCookie(TOKEN_KEY, access, 7); // 7 days (the refresh token's lifespan)
   if (refresh) setCookie(REFRESH_KEY, refresh, 7);
   else deleteCookie(REFRESH_KEY);
+  notifySessionChange();
 }
 
 /** Alias compatible con el contexto de sesión. */
@@ -45,10 +46,17 @@ export function setTokensData(access: string, refresh?: string): void {
 export function clearTokens(): void {
   deleteCookie(TOKEN_KEY);
   deleteCookie(REFRESH_KEY);
+  notifySessionChange();
 }
 
 /** Alias compatible con el contexto de sesión. */
 export const clearStoredSession = clearTokens;
+
+/** Notifica a los proveedores React (AuthProvider) que la cookie de sesión cambió. */
+export function notifySessionChange(): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new Event('pa:session-change'));
+}
 
 export async function fetchSetupStatus(): Promise<boolean> {
   try {

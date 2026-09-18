@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useSyncExternalStore,
   useState,
   type ReactNode,
 } from 'react';
@@ -47,43 +48,45 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
+/* Sesión como sistema externo (cookies solo-cliente): el servidor y la
+   hidratación usan las snapshots sin sesión → SSR estable (evita #418). */
+const SESSION_EVENT = 'pa:session-change';
+
+function subscribeToSession(onStoreChange: () => void): () => void {
+  if (typeof window === 'undefined') return () => {};
+  window.addEventListener(SESSION_EVENT, onStoreChange);
+  return () => window.removeEventListener(SESSION_EVENT, onStoreChange);
+}
+
+function getSessionToken(): string | null {
+  return getAccessToken();
+}
+
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
-
-  const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // El token se hidrata desde el almacenamiento tras el primer render para no
-  // romper el SSR; el estado se ajusta durante el render (patrón recomendado).
-  const [tokenLoaded, setTokenLoaded] = useState(false);
-  if (!tokenLoaded && typeof window !== 'undefined') {
-    const token = getAccessToken();
-    setTokenLoaded(true);
-    setAccessToken(token);
-    setIsLoading(Boolean(token));
-  }
+  const accessToken = useSyncExternalStore(subscribeToSession, getSessionToken, () => null);
 
   useEffect(() => {
     let cancelled = false;
-    if (!accessToken) {
-      return;
-    }
+    void (async () => {
+      if (!accessToken) {
+        if (!cancelled) setIsLoading(false);
+        return;
+      }
 
-    apiClient
-      .post<User>('/auth/me')
-      .then((meUser) => {
+      try {
+        const meUser = await apiClient.post<User>('/auth/me');
         if (!cancelled) setUser(meUser);
-      })
-      .catch(() => {
+      } catch {
         if (cancelled) return;
         setUser(null);
-        setAccessToken(null);
         clearStoredSession();
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setIsLoading(false);
-      });
-
+      }
+    })();
     return () => {
       cancelled = true;
     };
@@ -91,13 +94,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const setSession = useCallback((result: AuthResult) => {
     storeSession(result.tokens.accessToken, result.tokens.refreshToken);
-    setAccessToken(result.tokens.accessToken);
     setUser(result.user);
   }, []);
 
   const clearSession = useCallback(() => {
     clearStoredSession();
-    setAccessToken(null);
     setUser(null);
   }, []);
 

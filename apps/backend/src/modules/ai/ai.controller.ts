@@ -1,8 +1,10 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
   NotFoundException,
+  Param,
   Patch,
   Post,
   Query,
@@ -17,6 +19,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { parsePageOptions } from '../../common/pagination/pagination.helper';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AI_PROMPT_FEATURES, AiPromptFeature } from './ai.constants';
 import { AiService, CampaignConfigResult, CommentAnalysisResult } from './ai.service';
 import { GenerateCommentReplyDto } from './dto/generate-comment-reply.dto';
 import { GenerateTextDto } from './dto/generate-text.dto';
@@ -24,6 +27,7 @@ import { AnalyzeCommentsDto } from './dto/analyze-comments.dto';
 import { AnalyzePendingCommentsDto } from './dto/analyze-pending-comments.dto';
 import { GenerateCampaignDto } from './dto/generate-campaign.dto';
 import { UpdateAiConfigDto } from './dto/update-ai-config.dto';
+import { UpdatePromptDto } from './dto/update-prompt.dto';
 import { AiUsageQueryDto } from './dto/ai-usage-query.dto';
 
 @ApiTags('Inteligencia Artificial')
@@ -103,6 +107,52 @@ export class AiController {
   @ApiOperation({ summary: 'Resumen de uso por proveedor/modelo (llamadas, tokens, latencia)' })
   async usageSummary() {
     return this.aiService.usageSummary();
+  }
+
+  @Get('prompts')
+  @Roles('ADMIN', 'MANAGER')
+  @ApiOperation({ summary: 'Plantillas de prompt por función (editable desde el panel)' })
+  async prompts() {
+    return this.aiService.listPrompts();
+  }
+
+  @Patch('prompts/:feature')
+  @Roles('ADMIN', 'MANAGER')
+  @ApiOperation({ summary: 'Actualiza la plantilla de prompt de una función (versionado automático)' })
+  async updatePrompt(
+    @Param('feature') feature: string,
+    @Body() dto: UpdatePromptDto,
+    @CurrentUser('sub') userId: string,
+  ) {
+    const updated = await this.aiService.updatePrompt(this.resolveFeature(feature), dto);
+    await this.audit.record({
+      userId,
+      action: 'IA_PROMPT_ACTUALIZADA',
+      category: LogCategory.AI,
+      metadata: { feature: updated.feature, version: updated.version },
+    });
+    return updated;
+  }
+
+  @Post('prompts/:feature/restore')
+  @Roles('ADMIN', 'MANAGER')
+  @ApiOperation({ summary: 'Restaura la plantilla de prompt de una función a los valores por defecto' })
+  async restorePrompt(@Param('feature') feature: string, @CurrentUser('sub') userId: string) {
+    const restored = await this.aiService.restorePrompt(this.resolveFeature(feature));
+    await this.audit.record({
+      userId,
+      action: 'IA_PROMPT_RESTAURADA',
+      category: LogCategory.AI,
+      metadata: { feature: restored.feature, version: restored.version },
+    });
+    return restored;
+  }
+
+  private resolveFeature(feature: string): AiPromptFeature {
+    if (!(AI_PROMPT_FEATURES as readonly string[]).includes(feature)) {
+      throw new BadRequestException(`Función de IA no soportada: ${feature}`);
+    }
+    return feature as AiPromptFeature;
   }
 
   @Post('generate-post')

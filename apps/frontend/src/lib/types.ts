@@ -532,6 +532,32 @@ export interface AiUsageSummaryRow {
   lastUsedAt: string | null;
 }
 
+export type AiPromptFeature =
+  | 'generate_post'
+  | 'generate_campaign'
+  | 'comment_reply'
+  | 'generate_reply'
+  | 'analyze_comment'
+  | 'moderate_comment';
+
+export interface PromptTemplateView {
+  feature: AiPromptFeature;
+  systemPrompt: string;
+  temperature: number | null;
+  maxTokens: number | null;
+  effectiveTemperature: number;
+  effectiveMaxTokens: number;
+  version: number;
+  isDefault: boolean;
+  updatedAt: string;
+}
+
+export interface UpdatePromptPayload {
+  systemPrompt?: string;
+  temperature?: number;
+  maxTokens?: number;
+}
+
 // ── Usuarios (administración) ────────────────────────────────────────────────
 export type UserRole = 'ADMIN' | 'MANAGER' | 'OPERATOR';
 
