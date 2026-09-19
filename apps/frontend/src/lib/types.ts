@@ -498,6 +498,15 @@ export interface UpdateAiConfigPayload {
   apiKey?: string;
 }
 
+export interface TestAiConfigPayload {
+  provider?: string;
+  model?: string;
+  baseUrl?: string;
+  temperature?: number;
+  maxTokens?: number;
+  apiKey?: string;
+}
+
 export interface AiConfigTestResult {
   ok: boolean;
   latencyMs: number;

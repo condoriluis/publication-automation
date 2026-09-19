@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { UserChip } from '@/components/user-chip';
 import { MetaLogo } from '@/components/meta-logo';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { AiStatusBadge } from '@/components/ai-status-badge';
 import { useAuthAdmin } from '@/contexts/auth-context';
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
@@ -279,7 +280,8 @@ function Topbar({
         </div>
 
         {/* Right: quick actions */}
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex min-w-0 shrink-0 items-center gap-2">
+          <AiStatusBadge />
           <ThemeToggle />
           <Button variant="outline" size="sm" asChild className="hidden sm:inline-flex">
             <Link href="/pages">

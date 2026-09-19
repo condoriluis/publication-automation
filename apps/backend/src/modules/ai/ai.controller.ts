@@ -28,6 +28,7 @@ import { AnalyzePendingCommentsDto } from './dto/analyze-pending-comments.dto';
 import { GenerateCampaignDto } from './dto/generate-campaign.dto';
 import { UpdateAiConfigDto } from './dto/update-ai-config.dto';
 import { UpdatePromptDto } from './dto/update-prompt.dto';
+import { TestAiConfigDto } from './dto/test-ai-config.dto';
 import { AiUsageQueryDto } from './dto/ai-usage-query.dto';
 
 @ApiTags('Inteligencia Artificial')
@@ -75,9 +76,9 @@ export class AiController {
 
   @Post('config/test')
   @Roles('ADMIN', 'MANAGER')
-  @ApiOperation({ summary: 'Prueba de conectividad con el proveedor activo' })
-  async testConfig(@CurrentUser('sub') userId: string) {
-    const result = await this.aiService.testConnection();
+  @ApiOperation({ summary: 'Prueba de conectividad con el proveedor activo o con los valores enviados (sin persistir)' })
+  async testConfig(@CurrentUser('sub') userId: string, @Body() dto?: TestAiConfigDto) {
+    const result = await this.aiService.testConnection(dto);
     await this.audit.record({
       userId,
       action: 'IA_CONFIG_PROBADA',

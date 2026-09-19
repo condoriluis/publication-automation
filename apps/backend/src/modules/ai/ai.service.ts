@@ -9,13 +9,17 @@ import { PaginationHelper, PaginationOptions } from '../../common/pagination/pag
 import { AIConfigService, ActiveAiConfig, AiConfigView } from './ai-config.service';
 import { UpdateAiConfigDto } from './dto/update-ai-config.dto';
 import { UpdatePromptDto } from './dto/update-prompt.dto';
+import { TestAiConfigDto } from './dto/test-ai-config.dto';
 import {
+  AI_DEFAULT_BASE_URLS,
+  AI_PROVIDERS,
   AI_MAX_SCALED_TOKENS,
   AI_MAX_TOKENS,
   AI_PROMPT_DEFAULTS,
   AI_PROMPT_FEATURES,
   AI_SECURITY_FOOTER,
   AiPromptFeature,
+  AiProviderName,
   CommentReviewThreshold,
   CommentRisk,
   PostLength,
@@ -351,33 +355,65 @@ export class AiService implements OnModuleInit {
   }
 
   /** Valida la conectividad con el proveedor activo con un prompt mínimo. */
-  async testConnection(): Promise<{ ok: boolean; latencyMs: number; provider: string; model: string; message: string }> {
+  async testConnection(dto?: TestAiConfigDto): Promise<{ ok: boolean; latencyMs: number; provider: string; model: string; message: string }> {
     const started = Date.now();
     const active = await this.aiConfig.getActive();
-    if (!active.apiKey) {
-      return { ok: false, latencyMs: 0, provider: active.provider, model: active.model, message: 'No hay API key configurada' };
+    const cfg = this.resolveTestConfig(dto, active);
+    if (!cfg.apiKey) {
+      return {
+        ok: false,
+        latencyMs: 0,
+        provider: cfg.provider,
+        model: cfg.model,
+        message: `Falta la API key del proveedor "${cfg.provider}" para probar la conexión. Escríbela en el campo API Key.`,
+      };
     }
     try {
       await this.chat('config_test', 'Responde exactamente: OK', {
         maxTokens: 10,
         systemOverride: 'Eres un asistente de prueba.',
-      });
+      }, cfg);
       return {
         ok: true,
         latencyMs: Date.now() - started,
-        provider: active.provider,
-        model: active.model,
+        provider: cfg.provider,
+        model: cfg.model,
         message: 'Conexión exitosa con el proveedor',
       };
     } catch (err) {
       return {
         ok: false,
         latencyMs: Date.now() - started,
-        provider: active.provider,
-        model: active.model,
+        provider: cfg.provider,
+        model: cfg.model,
         message: err instanceof Error ? err.message : 'Error al contactar el proveedor',
       };
     }
+  }
+
+  /**
+   * Construye la config a probar a partir del formulario (nunca se persiste).
+   * La API key nueva solo se usa para la prueba; si no se envió, se reutiliza
+   * la guardada siempre que el proveedor sea el mismo (evita probar con la
+   * clave equivocada al cambiar de proveedor).
+   */
+  private resolveTestConfig(dto: TestAiConfigDto | undefined, active: ActiveAiConfig): ActiveAiConfig {
+    const provider = dto?.provider && (AI_PROVIDERS as readonly string[]).includes(dto.provider)
+      ? dto.provider
+      : active.provider;
+    const baseUrl = dto?.baseUrl?.trim()
+      || (provider === active.provider ? active.baseUrl : AI_DEFAULT_BASE_URLS[provider as AiProviderName]);
+    const apiKey = dto?.apiKey?.trim()
+      || (provider === active.provider ? active.apiKey : '');
+    return {
+      provider,
+      model: dto?.model?.trim() || active.model,
+      apiKey,
+      baseUrl,
+      temperature: dto?.temperature ?? active.temperature,
+      maxTokens: dto?.maxTokens ?? active.maxTokens,
+      systemPrompt: active.systemPrompt,
+    };
   }
 
   /** Respuesta de iaReply natural para un comentario de seguidor (workers). */
@@ -675,7 +711,7 @@ this.logger.log(`Análisis automático de comentarios: ${analyzed.length}/${ids.
   // Transporte multi-proveedor
   // ---------------------------------------------------------------------------
 
-  private async chat(feature: string, user: string, opts?: ChatOptions): Promise<string> {
+  private async chat(feature: string, user: string, opts?: ChatOptions, configOverride?: ActiveAiConfig): Promise<string> {
     const {
       provider,
       model,
@@ -684,7 +720,7 @@ this.logger.log(`Análisis automático de comentarios: ${analyzed.length}/${ids.
       temperature: configTemperature,
       maxTokens: configMaxTokens,
       systemPrompt: configSystemPrompt,
-    } = await this.aiConfig.getActive();
+    } = configOverride ?? (await this.aiConfig.getActive());
     if (!apiKey) throw new AiUnavailableError('Servicio de IA no disponible: falta API key configurada');
 
     const usesTemplate = (AI_PROMPT_FEATURES as readonly string[]).includes(feature);

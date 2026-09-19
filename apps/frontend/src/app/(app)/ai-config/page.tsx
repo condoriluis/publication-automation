@@ -26,6 +26,7 @@ import type {
   AiUsageSummaryRow,
   Paginated,
   PromptTemplateView,
+  TestAiConfigPayload,
   UpdateAiConfigPayload,
   UpdatePromptPayload,
 } from '@/lib/types';
@@ -185,11 +186,11 @@ export default function AiConfigPage() {
     }
   }
 
-  async function testConnection(): Promise<void> {
+  async function testConnection(dto: TestAiConfigPayload): Promise<void> {
     setTesting(true);
     try {
-      const res = await api.post<AiConfigTestResult>('/ai/config/test', {});
-      if (res.ok) toast.success(`Conexión OK · ${res.message} (${fmtMs(res.latencyMs)})`);
+      const res = await api.post<AiConfigTestResult>('/ai/config/test', dto);
+      if (res.ok) toast.success(`Conexión OK con ${res.provider} / ${res.model} · ${fmtMs(res.latencyMs)}`);
       else toast.error(`${res.message} (${fmtMs(res.latencyMs)})`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Error al probar la conexión');
@@ -310,7 +311,7 @@ function ConfigCard({
   saving: boolean;
   testing: boolean;
   onSave: (dto: UpdateAiConfigPayload) => void;
-  onTest: () => void;
+  onTest: (dto: TestAiConfigPayload) => void;
 }) {
   const [provider, setProvider] = useState<string>(() => config?.provider ?? 'openai');
   const [model, setModel] = useState<string>(() => config?.model ?? '');
@@ -380,7 +381,12 @@ function ConfigCard({
             variant="outline"
             size="sm"
             disabled={testing}
-            onClick={() => void onTest()}
+            onClick={() => void onTest({
+              provider,
+              model: model.trim(),
+              baseUrl: baseUrl.trim(),
+              apiKey: apiKey.trim(),
+            })}
             className="w-full sm:w-auto"
           >
             {testing ? <Loader2 className="animate-spin" /> : <Zap className="size-3.5" />}
