@@ -49,6 +49,10 @@ interface DataTableProps<TData, TValue> {
   onPaginationChange?: (pageIndex: number, pageSize: number) => void;
   /** Se dispara al escribir en el buscador (modo remoto). */
   onSearchChange?: (value: string) => void;
+  /** Oculta el buscador y el selector de tamaño de página. */
+  hideToolbar?: boolean;
+  /** Oculta el bloque de paginación (ideal para tablas resumen). */
+  hidePagination?: boolean;
 }
 
 const expanderColumn: ColumnDef<unknown, unknown> = {
@@ -78,6 +82,8 @@ export function DataTable<TData, TValue>({
   rowCount,
   onPaginationChange,
   onSearchChange,
+  hideToolbar,
+  hidePagination,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = React.useState('');
@@ -124,7 +130,8 @@ export function DataTable<TData, TValue>({
   return (
     <div className="space-y-4">
       {/* 🔎 Filtros y selector */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      {!hideToolbar && (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative w-full sm:max-w-sm">
           <Input
             placeholder="Buscar..."
@@ -168,6 +175,7 @@ export function DataTable<TData, TValue>({
           <span className="text-xs text-[var(--muted-foreground)] sm:text-sm">registros</span>
         </div>
       </div>
+      )}
 
       {/* 🔎 Tabla scrollable en móvil */}
       <div className="overflow-x-auto rounded-md border bg-[var(--card)] shadow-sm">
@@ -232,7 +240,8 @@ export function DataTable<TData, TValue>({
       </div>
 
       {/* 🔎 Paginación */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      {!hidePagination && (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <span className="text-xs text-[var(--muted-foreground)] sm:text-sm">
           Mostrando {totalRows > 0 ? firstRowIndex : 0} - {totalRows > 0 ? lastRowIndex : 0} de {totalRows}
         </span>
@@ -277,6 +286,7 @@ export function DataTable<TData, TValue>({
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }

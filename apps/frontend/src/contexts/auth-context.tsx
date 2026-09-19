@@ -76,6 +76,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
         return;
       }
 
+      // Se empieza a resolver el perfil: mantenemos `isLoading` en `true`
+      // mientras el usuario no esté confirmado, para que ninguna página
+      // dependiente de roles muestre un aviso de permisos prematuro.
+      if (!cancelled) setIsLoading(true);
       try {
         const meUser = await apiClient.post<User>('/auth/me');
         if (!cancelled) setUser(meUser);

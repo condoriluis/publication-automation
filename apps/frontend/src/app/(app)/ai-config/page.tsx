@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { type ColumnDef } from '@tanstack/react-table';
 import {
   Sparkles,
@@ -33,13 +34,17 @@ import { DataTable } from '@/components/ui/data-table';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuthAdmin } from '@/contexts/auth-context';
 import { formatRelative } from '@/lib/utils';
+
+const PromptEditor = dynamic(() => import('@/components/ai/prompt-editor').then((m) => m.default), {
+  ssr: false,
+  loading: () => <Skeleton className="h-56 w-full" />,
+});
 
 const PROVIDERS = ['openai', 'anthropic', 'google', 'groq', 'openrouter'] as const;
 
@@ -104,8 +109,12 @@ function fmtMs(ms: number): string {
 }
 
 export default function AiConfigPage() {
-  const { user, isLoading } = useAuthAdmin();
+  const { user, isLoading, isAuthenticated } = useAuthAdmin();
   const canManage = Boolean(user?.roles.some((r) => r === 'ADMIN' || r === 'MANAGER'));
+  // Mientras la sesión se resuelve (hidratación / `/auth/me`) todavía no
+  // conocemos los roles: mostramos el loader y evitamos el "flash" de acceso
+  // denegado que aparecía durante unos segundos.
+  const resolving = isLoading || (isAuthenticated && !user);
 
   const [config, setConfig] = useState<AiConfigView | null>(null);
   const [prompts, setPrompts] = useState<PromptTemplateView[] | null>(null);
@@ -145,7 +154,7 @@ export default function AiConfigPage() {
       .catch(() => undefined);
   }, [canManage, usagePage, usageLimit]);
 
-  if (isLoading) {
+  if (resolving) {
     return (
       <div className="flex min-h-[400px] items-center justify-center">
         <Loader2 className="size-8 animate-spin text-muted-foreground" />
@@ -154,11 +163,7 @@ export default function AiConfigPage() {
   }
 
   if (!canManage) {
-    return (
-      <div className="space-y-6">
-        No tienes permisos ({user?.displayName ?? '…'}) para ver esta página. Solo Administradores y Managers.
-      </div>
-    );
+    return <AccessDenied name={user?.displayName ?? null} />;
   }
 
   async function saveConfig(dto: UpdateAiConfigPayload): Promise<void> {
@@ -225,7 +230,7 @@ export default function AiConfigPage() {
         subtitle="Configuración de proveedor, comportamiento y métricas de uso"
       />
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-2 [&>*]:min-w-0">
         <ConfigCard
           key={`${config?.provider ?? 'loading'}:${config?.model ?? ''}`}
           config={config}
@@ -259,7 +264,29 @@ export default function AiConfigPage() {
   );
 }
 
-/* ── Configuración del proveedor ──────────────────────────────────────────── */
+/* ── Acceso denegado ─────────────────────────────────────────────────────── */
+function AccessDenied({ name }: { name?: string | null }) {
+  return (
+    <div className="flex min-h-[60vh] items-center justify-center">
+      <Card className="w-full max-w-md">
+        <CardContent className="flex flex-col items-center gap-2 px-6 py-8 text-center">
+          <div className="flex size-12 items-center justify-center rounded-full bg-red-500/10">
+            <Lock className="size-6 text-red-500" />
+          </div>
+          <h2 className="text-base font-semibold text-foreground">Acceso restringido</h2>
+          <p className="text-sm text-muted-foreground">
+            No tienes permisos{name ? ` (${name})` : ''} para ver esta página.
+          </p>
+          <p className="text-xs text-muted-foreground/70">
+            Solo Administradores y Managers pueden acceder a la configuración de IA.
+          </p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+/* ── Distribución principal ──────────────────────────────────────────────── */
 function ConfigCard({
   config,
   saving,
@@ -280,7 +307,7 @@ function ConfigCard({
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-x-2">
+      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
         <CardTitle className="flex items-center gap-2 text-base">
           <Sparkles className="size-4 text-[#1877F2]" />
           Proveedor y modelo activo
@@ -391,11 +418,12 @@ function GlobalInstructionsCard({
         <p className="text-sm text-muted-foreground">
           Define el contexto general, como el tono de voz de tu marca. Se aplicará a todas las interacciones.
         </p>
-        <Textarea
+        <PromptEditor
           value={value}
-          onChange={(e) => setValue(e.target.value)}
-          rows={3}
+          onChange={setValue}
+          minHeight="140px"
           placeholder="Ej: Eres un asistente amigable y profesional para [Nombre Empresa]..."
+          title="Instrucciones generales"
         />
         <div className="flex items-center justify-end gap-2">
           <Button
@@ -513,11 +541,10 @@ function PromptEditorForm({
 
       <div className="space-y-1.5">
         <Label htmlFor="prompt-text">Instrucciones Específicas</Label>
-        <Textarea
-          id="prompt-text"
+        <PromptEditor
           value={systemPrompt}
-          onChange={(e) => setSystemPrompt(e.target.value)}
-          rows={8}
+          onChange={setSystemPrompt}
+          title="Prompt · Instrucciones específicas"
           placeholder="Describe el comportamiento esperado para esta función..."
         />
       </div>
@@ -677,7 +704,7 @@ function SummaryCard({ summary }: { summary: AiUsageSummaryRow[] }) {
             Sin registros todavía. El consumo se mide a partir de la primera llamada de IA.
           </p>
         ) : (
-          <DataTable columns={columns} data={summary} />
+          <DataTable columns={columns} data={summary} hideToolbar hidePagination />
         )}
       </CardContent>
     </Card>
