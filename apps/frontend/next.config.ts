@@ -23,6 +23,7 @@ const apiSource = /^https?:\/\//.test(apiUrl) ? new URL(apiUrl).origin : 'self';
 const csp = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.google.com https://www.gstatic.com",
+  "worker-src 'self' blob:",
   "style-src 'self' 'unsafe-inline' https://www.gstatic.com",
   "img-src 'self' blob: data: https:",
   "font-src 'self' data:",

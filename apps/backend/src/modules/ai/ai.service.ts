@@ -49,7 +49,11 @@ interface AnthropicChatResponse {
 
 /** Respuesta mínima de generateContent de Google. */
 interface GoogleChatResponse {
-  candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  candidates?: Array<{
+    finishReason?: string;
+    content?: { parts?: Array<{ text?: string; thought?: boolean }> };
+  }>;
+  promptFeedback?: { blockReason?: string };
   usageMetadata?: {
     promptTokenCount?: number;
     candidatesTokenCount?: number;
@@ -370,7 +374,7 @@ export class AiService implements OnModuleInit {
     }
     try {
       await this.chat('config_test', 'Responde exactamente: OK', {
-        maxTokens: 10,
+        maxTokens: 128,
         systemOverride: 'Eres un asistente de prueba.',
       }, cfg);
       return {
@@ -968,8 +972,19 @@ this.logger.log(`Análisis automático de comentarios: ${analyzed.length}/${ids.
         timeout: 60_000,
       },
     );
-    const content = data.candidates?.[0]?.content?.parts?.map((p) => p.text).join('')?.trim();
-    if (!content) throw new AiUnavailableError('El proveedor de IA devolvió una respuesta vacía');
+    const content =
+      data.candidates?.[0]?.content?.parts
+        ?.filter((p) => !p.thought)
+        .map((p) => p.text)
+        .join('')
+        ?.trim();
+    if (!content) {
+      const finish = data.candidates?.[0]?.finishReason;
+      const block = data.promptFeedback?.blockReason;
+      throw new AiUnavailableError(
+        `El proveedor de IA respondió sin texto (finishReason=${finish ?? 'desconocido'}${block ? `, blockReason=${block}` : ''}). Verifica el modelo "${args.model}" y la configuración.`,
+      );
+    }
     this.logger.debug(`IA (google) generó ${content.length} chars`);
     return {
       content,
