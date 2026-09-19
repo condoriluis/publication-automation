@@ -92,6 +92,14 @@ export function DataTable<TData, TValue>({
 
   const isRemote = manualPagination === true;
 
+  // En modo remoto, al buscar/resetear reiniciamos la vista a la primera
+  // página (el padre también reinicia la suya): evita que se quede en la
+  // página 2 de una búsqueda nueva.
+  const resetToFirstPage = () => {
+    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+    onPaginationChange?.(0, pagination.pageSize);
+  };
+
   const mergedColumns = React.useMemo<ColumnDef<TData, TValue>[]>(
     () => (renderSubComponent ? ([expanderColumn, ...columns] as ColumnDef<TData, TValue>[]) : columns),
     [columns, renderSubComponent],
@@ -118,7 +126,11 @@ export function DataTable<TData, TValue>({
     getPaginationRowModel: getPaginationRowModel(),
     getExpandedRowModel: getExpandedRowModel(),
     ...(isRemote
-      ? { pageCount: Math.max(1, Math.ceil((rowCount ?? 0) / pagination.pageSize)), rowCount }
+      ? {
+          manualPagination: true,
+          pageCount: Math.max(1, Math.ceil((rowCount ?? 0) / pagination.pageSize)),
+          rowCount,
+        }
       : {}),
   });
 
@@ -138,7 +150,10 @@ export function DataTable<TData, TValue>({
             value={globalFilter ?? ''}
             onChange={(e) => {
               setGlobalFilter(e.target.value);
-              if (isRemote) onSearchChange?.(e.target.value);
+              if (isRemote) {
+                onSearchChange?.(e.target.value);
+                resetToFirstPage();
+              }
             }}
             className="pr-8"
           />
@@ -146,7 +161,10 @@ export function DataTable<TData, TValue>({
             <button
               onClick={() => {
                 setGlobalFilter('');
-                if (isRemote) onSearchChange?.('');
+                if (isRemote) {
+                  onSearchChange?.('');
+                  resetToFirstPage();
+                }
               }}
               className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
             >

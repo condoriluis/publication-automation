@@ -255,6 +255,9 @@ export default function AiConfigPage() {
         onPaginationChange={(page, limit) => {
           setUsagePage(page);
           setUsageLimit(limit);
+          // Mientras carga la página nueva, muestra el esqueleto en vez de
+          // las filas de la página anterior.
+          setUsage(null);
         }} 
       />
     </div>

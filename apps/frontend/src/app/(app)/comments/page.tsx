@@ -222,12 +222,16 @@ function CommentsContent() {
     searchTimer.current = setTimeout(() => {
       setSearch(value);
       setPage(1);
+      setRes(null);
     }, 350);
   }, []);
 
   const onPaginationChange = useCallback((pageIndex: number, pageSize: number) => {
     setPage(pageIndex + 1);
     setLimit(pageSize);
+    // Mientras carga la página nueva, muestra el loader en vez de las filas
+    // de la página anterior.
+    setRes(null);
   }, []);
 
   const act = useCallback(
