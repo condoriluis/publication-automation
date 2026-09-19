@@ -2,11 +2,16 @@
 
 import { memo, useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import Editor, { type OnMount } from "@monaco-editor/react";
+import Editor, { loader as monacoLoader, type OnMount } from "@monaco-editor/react";
+import * as monaco from "monaco-editor";
 import { useTheme } from "next-themes";
 import { Check, Maximize2, Minimize2, Wand2, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+
+// Self-hosted: se empaqueta monaco-editor en el bundle en vez de descargarlo
+// desde el CDN de jsdelivr (bloqueado por la Content-Security-Policy).
+monacoLoader.config({ monaco });
 
 /** Deja el texto ordenado: sin espacios finales ni párrafos colgados. */
 export function normalizePrompt(text: string): string {

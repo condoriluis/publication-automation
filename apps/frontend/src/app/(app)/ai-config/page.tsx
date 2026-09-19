@@ -155,11 +155,7 @@ export default function AiConfigPage() {
   }, [canManage, usagePage, usageLimit]);
 
   if (resolving) {
-    return (
-      <div className="flex min-h-[400px] items-center justify-center">
-        <Loader2 className="size-8 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <AiConfigSkeleton />;
   }
 
   if (!canManage) {
@@ -260,6 +256,22 @@ export default function AiConfigPage() {
           setUsageLimit(limit);
         }} 
       />
+    </div>
+  );
+}
+
+/* ── Esqueleto de carga ──────────────────────────────────────────────────── */
+function AiConfigSkeleton() {
+  return (
+    <div className="space-y-4">
+      <Skeleton className="h-8 w-64" />
+      <div className="grid gap-6 lg:grid-cols-2 [&>*]:min-w-0">
+        <Skeleton className="h-72" />
+        <Skeleton className="h-72" />
+      </div>
+      <Skeleton className="h-28" />
+      <Skeleton className="h-[420px]" />
+      <Skeleton className="h-64" />
     </div>
   );
 }
