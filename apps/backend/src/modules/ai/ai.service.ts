@@ -763,13 +763,19 @@ this.logger.log(`Análisis automático de comentarios: ${analyzed.length}/${ids.
         });
         return result.content;
       } catch (err: any) {
+        const providerDetail =
+          axios.isAxiosError(err) && err.response?.data
+            ? ` · ${typeof err.response.data === 'string' ? err.response.data : JSON.stringify(err.response.data)}`
+            : '';
+        const errorMessage = `${err?.message ?? 'Error desconocido'}${providerDetail}`.slice(0, 500);
+        this.logger.warn(`IA (${provider}/${model}, ${feature}) falló: ${errorMessage}`);
         void this.recordUsage({
           provider,
           model,
           feature,
           status: 'ERROR',
           latencyMs: Date.now() - startedAt,
-          errorMessage: (err?.message ?? 'Error desconocido').slice(0, 500),
+          errorMessage,
           promptVersion,
         });
         if (axios.isAxiosError(err)) {
@@ -786,7 +792,7 @@ this.logger.log(`Análisis automático de comentarios: ${analyzed.length}/${ids.
         if (attempts >= 3) {
           throw err instanceof AiUnavailableError
             ? err
-            : new AiUnavailableError(`Error en el proveedor de IA: ${err.message || 'Desconocido'}`);
+            : new AiUnavailableError(`Error en el proveedor de IA: ${errorMessage}`);
         }
         // Backoff antes de reintentar
         await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -949,6 +955,24 @@ this.logger.log(`Análisis automático de comentarios: ${analyzed.length}/${ids.
     };
   }
 
+  /**
+   * Configuración de generación para Google según la familia del modelo.
+   * - Gemini 3.x: no permite razonamiento "off", pero `thinkingLevel: "low"`
+   *   recorta mucho la latencia. Google desaconseja tocar `temperature` en la
+   *   familia 3.x (puede degradar/loopear la salida), así que se omite.
+   * - Gemini 2.5 Flash/Lite: se puede desactivar el pensamiento por completo.
+   * - Resto (p. ej. 2.5 Pro): no admite desactivar razonamiento.
+   */
+  private googleGenerationConfig(model: string, temperature: number, maxTokens: number): Record<string, unknown> {
+    if (/gemini-3/i.test(model)) {
+      return { maxOutputTokens: maxTokens, thinkingConfig: { thinkingLevel: 'low' } };
+    }
+    if (/gemini-2\.5-(flash|lite)/i.test(model)) {
+      return { maxOutputTokens: maxTokens, temperature, thinkingConfig: { thinkingBudget: 0 } };
+    }
+    return { maxOutputTokens: maxTokens, temperature };
+  }
+
   private async chatGoogle(args: {
     baseUrl: string;
     model: string;
@@ -964,7 +988,7 @@ this.logger.log(`Análisis automático de comentarios: ${analyzed.length}/${ids.
       {
         system_instruction: { parts: [{ text: args.system }] },
         contents: [{ role: 'user', parts: [{ text: args.user }] }],
-        generationConfig: { maxOutputTokens: args.maxTokens, temperature: args.temperature },
+        generationConfig: this.googleGenerationConfig(args.model, args.temperature, args.maxTokens),
       },
       {
         params: { key: args.apiKey },
