@@ -15,7 +15,12 @@ import { PostFilterDto } from './dto/post-filter.dto';
 export type PostDetail = Post & {
   page: { id: string; name: string };
   campaign: { id: string; name: string } | null;
-  engagement: { likes: number; comments: number; shares: number; reach: number; impressions: number } | null;
+  engagement: {
+    likes: number; comments: number; shares: number;
+    reach: number; impressions: number; engagements: number;
+    eligibleForPromotion: boolean | null; restricted: boolean;
+    restrictionReason: string | null;
+  } | null;
   _count: { comments: number };
 };
 

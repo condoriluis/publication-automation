@@ -33,6 +33,18 @@ export interface PagePublishResult {
   permalink: string;
 }
 
+/** Estado de distribución de un post publicado (publicado, promocionable, alcance). */
+export interface PostDistribution {
+  isPublished: boolean;
+  eligibleForPromotion: boolean;
+  likes: number;
+  comments: number;
+  shares: number;
+  reach: number | null;
+  impressions: number | null;
+  engagements: number | null;
+}
+
 export interface FacebookComment {
   id: string;
   message?: string;
@@ -247,6 +259,68 @@ export class FacebookService {
   async deletePost(pageId: string, metaObjectId: string): Promise<void> {
     const { token } = await this.loadPage(pageId);
     await this.request('DELETE', `/${metaObjectId}`, { params: { access_token: token } });
+  }
+
+  /**
+   * Estado de distribución de un post publicado: si sigue publicado, si es
+   * elegible para promoción (Meta lo desactiva al restringir contenido por
+   * calidad/spam) y métricas básicas de alcance. Devuelve null si Meta no
+   * puede responder (permisos insuficientes, token, límites, etc.).
+   */
+  async getPostDistribution(pageId: string, metaObjectId: string): Promise<PostDistribution | null> {
+    try {
+      const { token } = await this.loadPage(pageId);
+
+      const summary = await this.request<{
+        is_published?: boolean;
+        is_eligible_for_promotion?: boolean;
+        likes?: { summary?: { total_count?: number } };
+        comments?: { summary?: { total_count?: number } };
+        shares?: { count?: number } | number;
+      }>('GET', `/${metaObjectId}`, {
+        params: {
+          access_token: token,
+          fields: 'is_published,is_eligible_for_promotion,likes.summary(true),comments.summary(true),shares',
+        },
+      });
+
+      const metrics: Record<string, number> = {};
+      try {
+        const insights = await this.request<{
+          data?: Array<{ name: string; values?: Array<{ value?: number }> }>;
+        }>('GET', `/${metaObjectId}/insights`, {
+          params: {
+            access_token: token,
+            metric: 'post_impressions,post_impressions_unique,post_engaged_users',
+            period: 'lifetime',
+          },
+        });
+        for (const m of insights.data ?? []) {
+          const value = m.values?.[0]?.value;
+          if (typeof value === 'number') metrics[m.name] = value;
+        }
+      } catch {
+        // Las métricas pueden fallar (permisos o agregación aún en curso):
+        // el estado de publicación/elegibilidad se conserva igualmente.
+      }
+
+      return {
+        isPublished: summary.is_published !== false,
+        eligibleForPromotion: summary.is_eligible_for_promotion !== false,
+        likes: summary.likes?.summary?.total_count ?? 0,
+        comments: summary.comments?.summary?.total_count ?? 0,
+        shares:
+          typeof summary.shares === 'number'
+            ? summary.shares
+            : (summary.shares?.count ?? 0),
+        reach: metrics.post_impressions_unique ?? null,
+        impressions: metrics.post_impressions ?? null,
+        engagements: metrics.post_engaged_users ?? null,
+      };
+    } catch (err) {
+      this.logger.warn(`Distribución no disponible para el post ${metaObjectId}: ${(err as Error).message}`);
+      return null;
+    }
   }
 
   // ---------------------------------------------------------------------------

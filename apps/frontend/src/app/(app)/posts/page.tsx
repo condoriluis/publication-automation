@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { Play, X, Trash2, ExternalLink, Plus, Loader2 } from 'lucide-react';
+import { Play, X, Trash2, ExternalLink, Plus, Loader2, ShieldAlert } from 'lucide-react';
 import { type ColumnDef } from '@tanstack/react-table';
 
 import { api } from '@/lib/api';
@@ -106,7 +106,19 @@ export default function PostsPage() {
     {
       accessorKey: 'status',
       header: 'Estado',
-      cell: ({ row }) => <StatusBadge value={row.original.status} />,
+      cell: ({ row }) => {
+        const p = row.original;
+        return (
+          <div className="flex items-center gap-1.5">
+            <StatusBadge value={p.status} />
+            {p.engagement?.restricted ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                <ShieldAlert className="size-3" /> Restringido
+              </span>
+            ) : null}
+          </div>
+        );
+      },
     },
     {
       id: 'actions',

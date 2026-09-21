@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { ArrowLeft, Play, X, Trash2, ExternalLink, RefreshCw, Loader2,
-  MessageSquare, ThumbsUp, Share2, Eye, TrendingUp, Bot, Clock, ChevronRight,
+  MessageSquare, ThumbsUp, Share2, Eye, TrendingUp, Bot, Clock, ChevronRight, ShieldAlert,
 } from 'lucide-react';
 
 import { api } from '@/lib/api';
@@ -98,6 +98,22 @@ export default function PostDetailPage() {
           ) : null}
         </div>
       </PageHeader>
+
+      {post.engagement?.restricted ? (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4">
+          <ShieldAlert className="size-5 shrink-0 text-amber-600 dark:text-amber-400" />
+          <div className="space-y-1">
+            <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">
+              Meta está limitando la distribución de esta publicación
+            </p>
+            <p className="text-xs leading-relaxed text-amber-700/80 dark:text-amber-300/80">
+              {post.engagement.restrictionReason ?? 'El post se publicó, pero no está llegando al público.'}{' '}
+              Para recuperar la distribución: usa imágenes diferentes por publicación, baja la frecuencia
+              de publicación y varía el contenido.
+            </p>
+          </div>
+        </div>
+      ) : null}
 
       <div className="grid gap-4 lg:grid-cols-5">
         {/* Left: post preview + meta */}

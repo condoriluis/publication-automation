@@ -5,6 +5,7 @@ import { FacebookModule } from '../modules/facebook/facebook.module';
 import { CampaignExecutorService } from './campaign-executor.service';
 import { CampaignSchedulerService } from './campaign-scheduler.service';
 import { CampaignWorkerService } from './campaign-worker.service';
+import { PostInsightsService } from './post-insights.service';
 import { ScheduledPostPublisherService } from './scheduled-post-publisher.service';
 
 /**
@@ -27,6 +28,7 @@ import { ScheduledPostPublisherService } from './scheduled-post-publisher.servic
     CampaignSchedulerService,
     CampaignWorkerService,
     ScheduledPostPublisherService,
+    PostInsightsService,
   ],
   exports: [CampaignExecutorService, CampaignSchedulerService, CampaignWorkerService],
 })

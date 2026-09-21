@@ -456,6 +456,10 @@ model EngagementMetric {
   reach           Int      @default(0)
   impressions     Int      @default(0)
   engagements     Int      @default(0)
+  // Distribución: cuando Meta restringe silenciosamente la publicación en el feed
+  eligibleForPromotion Boolean?
+  restricted      Boolean  @default(false)
+  restrictionReason String?
   measuredAt      DateTime @default(now())
   raw             Json?
 

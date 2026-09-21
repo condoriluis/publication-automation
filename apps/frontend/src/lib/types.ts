@@ -231,6 +231,10 @@ export interface EngagementMetric {
   shares: number;
   reach: number;
   impressions: number;
+  engagements: number;
+  eligibleForPromotion: boolean | null;
+  restricted: boolean;
+  restrictionReason: string | null;
 }
 
 export interface PostDetail {
