@@ -85,8 +85,9 @@ interface ChatOptions {
 /**
  * Defensa en profundidad sobre textos libres generados por la IA (respuestas
  * y publicaciones): elimina HTML/scripts peligrosos para que nada que renderice
- * el frontend pueda convertirse en una inyección (XSS). No altera el texto
- * plano normal de una respuesta.
+ * el frontend pueda convertirse en una inyección (XSS). Además normaliza el
+ * formato conservando los saltos de línea simples (estructura del post: hook,
+ * viñetas con emoji y cierre), sin colapsarlos en un único párrafo.
  */
 function sanitizeAIText(text: string): string {
   return text
@@ -95,7 +96,10 @@ function sanitizeAIText(text: string): string {
     .replace(/<iframe[\s\S]*?>[\s\S]*?<\/iframe>/gi, '')
     .replace(/\son\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
     .replace(/(<[^>\s]+)(\s+href|\s+src)\s*=\s*["']?javascript:[^"'>\s]*/gi, '$1')
-    .replace(/\s{2,}/g, ' ')
+    .replace(/\r\n?/g, '\n')
+    .replace(/[ \t]+(?=\n)/g, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
 
@@ -117,6 +121,10 @@ export interface AiReplyInput {
 export interface GeneratePostInput {
   page: { id: string; name: string; category?: string | null; description?: string | null };
   theme: string;
+  /** Texto base de referencia (estilo, tono y puntos clave) que NO debe fijar la variación. */
+  reference?: string;
+  /** Medio que se adjuntará al post, para que el texto sea coherente con él. */
+  attachedMedia?: { imageUrls?: string[]; videoUrl?: string | null; linkUrl?: string | null };
   audience?: string;
   tone?: string;
   length?: PostLength;
@@ -443,6 +451,10 @@ export class AiService implements OnModuleInit {
       input.page.category ? `Categoría: ${input.page.category}.` : '',
       input.page.description ? `Descripción: ${input.page.description}.` : '',
       `Tema solicitado: ${input.theme}.`,
+      input.reference
+        ? `Referencia (estilo, tono y puntos clave a respetar, pero usa un ÁNGULO, titular y ejemplos DIFERENTES; no la copies tal cual):\n<referencia>\n${input.reference}\n</referencia>`
+        : '',
+      this.buildMediaContext(input.attachedMedia),
       input.audience ? `Audiencia objetivo: ${input.audience}.` : 'Analiza el tema y deduce la audiencia objetivo.',
       input.tone ? `Tono: ${input.tone}.` : 'Usa un tono altamente persuasivo y adecuado para la red social.',
       input.variant && input.total
@@ -456,6 +468,22 @@ export class AiService implements OnModuleInit {
       .join('\n');
 
     return sanitizeAIText(await this.chat('generate_post', user));
+  }
+
+  /** Contexto del medio adjunto para que el texto generado sea coherente con él. */
+  private buildMediaContext(media?: { imageUrls?: string[]; videoUrl?: string | null; linkUrl?: string | null }): string {
+    if (!media) return '';
+    const items = [
+      media.imageUrls?.length ? `- Imagen(es) adjunta(s).` : '',
+      media.videoUrl ? `- Video adjunto.` : '',
+      media.linkUrl ? `- Enlace adjunto (Facebook mostrará una tarjeta de vista previa): ${media.linkUrl}.` : '',
+    ].filter(Boolean);
+    if (items.length === 0) return '';
+    return [
+      'El post se publicará CON el medio adjunto. El texto debe ser coherente con él:',
+      ...items,
+      'Si no puedes visualizar el contenido exacto del medio, mantén el copy centrado en el tema de la campaña sin contradecir el visual, e invita a interactuar con el medio publicado (en el caso del enlace, invita a conocer el recurso).',
+    ].join('\n');
   }
 
   /** Genera automáticamente la configuración de una campaña a partir del título. */

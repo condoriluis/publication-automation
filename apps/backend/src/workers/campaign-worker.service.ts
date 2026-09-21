@@ -216,7 +216,13 @@ export class CampaignWorkerService {
             this.logger.debug(`Generando post dinámico con IA para el grupo ${group.id}`);
             content = await this.aiService.generatePostText({
               page,
-              theme: group.campaign.contentTemplate,
+              theme: group.campaign.name,
+              reference: group.campaign.contentTemplate,
+              attachedMedia: {
+                imageUrls: (group.campaign.imageUrls as string[] | null) ?? [],
+                videoUrl: group.campaign.videoUrl,
+                linkUrl: group.campaign.linkUrl,
+              },
               length: 'medium',
               variant: i + 1,
               total: group.actionsTarget,

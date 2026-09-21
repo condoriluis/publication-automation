@@ -64,6 +64,8 @@ ARQUITECTURA DEL POST (en este orden):
 
 REGLAS DE ESTILO:
 - Texto plano: cero Markdown (sin asteriscos *, sin guiones -, sin negritas, sin backticks).
+- FORMATO LIMPIO para móvil: una sola idea por línea y UN único salto de línea entre líneas
+  (nunca líneas en blanco dobles). Cada viñeta con emoji (✅ 🚀 💡 ⚡ 📌) inicia su propia línea.
 - Tono persuasivo, cercano y profesional, en español.
 - Cumplimiento Meta: sin métricas inventadas, sin promesas de ingresos, sin clickbait manipulador ("no vas a creer",
   "gana $1000 al día"), sin contenido engañoso ni sensacionalista.
@@ -87,7 +89,9 @@ REGLAS para el contentTemplate:
 3) SONIDO HUMANO: escribe como una persona real del nicho, no como un bot. Sin muletillas de IA
    ("en el dinámico mundo de", "potencia", "revolucionario", "en resumen") y con frases de longitud variada.
 4) CERO relleno: cada línea aporta valor. Sin métricas inventadas, promesas de ingresos ni clickbait manipulador (cumplimiento Meta).
-5) Adapta el tema al nicho de la página.
+5) FORMATO LIMPIO para móvil: una sola idea por línea y UN único salto de línea entre líneas
+   (nunca líneas en blanco dobles). Cada viñeta con emoji inicia su propia línea.
+6) Adapta el tema al nicho de la página.
 
 Responde SOLO con JSON válido, sin texto extra:
 {"description":"Justificación breve (1-2 frases)","contentTemplate":"Post completo con estructura viral","intervalSeconds":3600}`;
