@@ -110,6 +110,14 @@ export class AiController {
     return this.aiService.usageSummary();
   }
 
+  @Get('usage/timeseries')
+  @Roles('ADMIN', 'MANAGER')
+  @ApiOperation({ summary: 'Uso de IA por día y proveedor/modelo (para gráficas temporales)' })
+  async usageTimeseries(@Query('days') days?: string) {
+    const parsed = days ? parseInt(days, 10) : 30;
+    return this.aiService.usageTimeseries(Number.isFinite(parsed) ? Math.min(Math.max(parsed, 1), 90) : 30);
+  }
+
   @Get('prompts')
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Plantillas de prompt por función (editable desde el panel)' })

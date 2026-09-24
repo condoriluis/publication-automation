@@ -6,6 +6,7 @@ import { CryptoService } from '../../common/crypto/crypto.service';
 import { Paginated, PaginationHelper } from '../../common/pagination/pagination.helper';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CampaignExecutorService } from '../../workers/campaign-executor.service';
+import { PostInsightsService } from '../../workers/post-insights.service';
 import { AuditService } from '../audit/audit.service';
 import { FacebookService } from '../facebook/facebook.service';
 import { CreatePostDto } from './dto/create-post.dto';
@@ -36,6 +37,7 @@ export class PostsService {
     private readonly crypto: CryptoService,
     private readonly pagination: PaginationHelper,
     private readonly executor: CampaignExecutorService,
+    private readonly insights: PostInsightsService,
     private readonly facebook: FacebookService,
     private readonly audit: AuditService,
     private readonly logger: AppLogger,
@@ -167,6 +169,16 @@ export class PostsService {
     });
     this.logger.log(`Post ${id} publicado (${result.status})`);
     return updated;
+  }
+
+  async refreshEngagement(userId: string, id: string): Promise<PostDetail> {
+    const post = await this.requirePost(userId, id);
+    if (post.status !== PostStatus.PUBLISHED || !post.metaObjectId) {
+      throw new ConflictException('Solo se pueden actualizar métricas de publicaciones publicadas en Facebook');
+    }
+    await this.insights.refreshPost(id);
+    this.logger.log(`Métricas de distribución del post ${id} actualizadas manualmente`);
+    return this.findOne(userId, id);
   }
 
   async cancel(userId: string, id: string): Promise<Post> {

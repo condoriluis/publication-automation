@@ -64,6 +64,14 @@ export class PostsController {
     return this.postsService.publish(userId, id);
   }
 
+  @Post(':id/refresh-metrics')
+  @HttpCode(HttpStatus.OK)
+  @Permissions('posts:write')
+  @ApiOperation({ summary: 'Actualizar al instante las métricas de distribución de un post publicado' })
+  refreshMetrics(@CurrentUser('sub') userId: string, @Param('id') id: string) {
+    return this.postsService.refreshEngagement(userId, id);
+  }
+
   @Post(':id/cancel')
   @HttpCode(HttpStatus.ACCEPTED)
   @Permissions('posts:write')

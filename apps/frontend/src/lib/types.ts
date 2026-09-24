@@ -545,6 +545,19 @@ export interface AiUsageSummaryRow {
   lastUsedAt: string | null;
 }
 
+export interface AiUsageTimeseriesRow {
+  date: string;
+  provider: string;
+  model: string;
+  calls: number;
+  ok: number;
+  errors: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  avgLatencyMs: number;
+}
+
 export type AiPromptFeature =
   | 'generate_post'
   | 'generate_campaign'

@@ -24,6 +24,7 @@ import type {
   AiPromptFeature,
   AiUsageRow,
   AiUsageSummaryRow,
+  AiUsageTimeseriesRow,
   Paginated,
   PromptTemplateView,
   TestAiConfigPayload,
@@ -41,21 +42,28 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuthAdmin } from '@/contexts/auth-context';
 import { formatRelative } from '@/lib/utils';
+import { PROVIDER_LABELS, UsageKpis } from '@/components/ai/usage-charts';
 
 const PromptEditor = dynamic(() => import('@/components/ai/prompt-editor').then((m) => m.default), {
   ssr: false,
   loading: () => <Skeleton className="h-56 w-full" />,
 });
 
-const PROVIDERS = ['openai', 'anthropic', 'google', 'groq', 'openrouter'] as const;
+const UsageCharts = dynamic(
+  () => import('@/components/ai/usage-charts').then((m) => m.UsageCharts),
+  {
+    ssr: false,
+    loading: () => (
+      <Card>
+        <CardContent>
+          <Skeleton className="h-80 w-full" />
+        </CardContent>
+      </Card>
+    ),
+  },
+);
 
-const PROVIDER_LABELS: Record<string, string> = {
-  openai: 'OpenAI',
-  anthropic: 'Anthropic',
-  google: 'Google (Gemini)',
-  groq: 'Groq',
-  openrouter: 'OpenRouter',
-};
+const PROVIDERS = ['openai', 'anthropic', 'google', 'groq', 'openrouter'] as const;
 
 const FEATURE_LABELS: Record<string, string> = {
   generate_post: 'Generar post',
@@ -120,6 +128,8 @@ export default function AiConfigPage() {
   const [config, setConfig] = useState<AiConfigView | null>(null);
   const [prompts, setPrompts] = useState<PromptTemplateView[] | null>(null);
   const [summary, setSummary] = useState<AiUsageSummaryRow[]>([]);
+  const [timeseries, setTimeseries] = useState<AiUsageTimeseriesRow[]>([]);
+  const [seriesDays, setSeriesDays] = useState(30);
   const [usage, setUsage] = useState<Paginated<AiUsageRow> | null>(null);
   const [usagePage, setUsagePage] = useState(1);
   const [usageLimit, setUsageLimit] = useState(10);
@@ -146,6 +156,14 @@ export default function AiConfigPage() {
       .then(setSummary)
       .catch(() => undefined);
   }, [canManage]);
+
+  useEffect(() => {
+    if (!canManage) return;
+    api
+      .get<AiUsageTimeseriesRow[]>(`/ai/usage/timeseries?days=${seriesDays}`)
+      .then(setTimeseries)
+      .catch(() => setTimeseries([]));
+  }, [canManage, seriesDays]);
 
   useEffect(() => {
     if (!canManage) return;
@@ -236,8 +254,10 @@ export default function AiConfigPage() {
           onSave={saveConfig}
           onTest={testConnection}
         />
-        <SummaryCard summary={summary} />
+        <UsageKpis summary={summary} />
       </div>
+
+      <UsageCharts summary={summary} timeseries={timeseries} days={seriesDays} onDaysChange={setSeriesDays} />
 
       <GlobalInstructionsCard key={config?.systemPrompt ?? 'loading'} initialValue={config?.systemPrompt ?? ''} onSave={saveGlobalInstructions} />
 
@@ -653,82 +673,6 @@ function PromptEditorForm({
         </div>
       </div>
     </div>
-  );
-}
-
-/* ── Uso por proveedor/modelo ─────────────────────────────────────────────── */
-function SummaryCard({ summary }: { summary: AiUsageSummaryRow[] }) {
-  const totalTokens = summary.reduce((acc, s) => acc + s.inputTokens + s.outputTokens, 0);
-  const totalCalls = summary.reduce((acc, s) => acc + s.calls, 0);
-
-  const columns: ColumnDef<AiUsageSummaryRow>[] = [
-    {
-      accessorKey: 'provider',
-      header: 'Proveedor',
-      cell: ({ row }) => PROVIDER_LABELS[row.original.provider] ?? row.original.provider,
-    },
-    {
-      accessorKey: 'model',
-      header: 'Modelo',
-      cell: ({ row }) => <span className="font-medium">{row.original.model}</span>,
-    },
-    {
-      accessorKey: 'calls',
-      header: 'Llamadas',
-      cell: ({ row }) => <span className="tabular-nums">{fmt(row.original.calls)}</span>,
-    },
-    {
-      id: 'status',
-      header: 'OK / Err',
-      cell: ({ row }) => (
-        <span className="tabular-nums">
-          <span className="text-emerald-600 dark:text-emerald-400">{row.original.ok}</span>
-          <span className="mx-1 text-muted-foreground">/</span>
-          <span className={row.original.errors > 0 ? 'text-red-600 dark:text-red-400' : ''}>{row.original.errors}</span>
-        </span>
-      ),
-    },
-    {
-      accessorKey: 'inputTokens',
-      header: 'Tokens in',
-      cell: ({ row }) => <span className="tabular-nums">{fmt(row.original.inputTokens)}</span>,
-    },
-    {
-      accessorKey: 'outputTokens',
-      header: 'Tokens out',
-      cell: ({ row }) => <span className="tabular-nums">{fmt(row.original.outputTokens)}</span>,
-    },
-    {
-      accessorKey: 'avgLatencyMs',
-      header: 'Lat. media',
-      cell: ({ row }) => <span className="tabular-nums">{fmtMs(row.original.avgLatencyMs)}</span>,
-    },
-    {
-      accessorKey: 'lastUsedAt',
-      header: 'Último uso',
-      cell: ({ row }) => <span className="whitespace-nowrap text-muted-foreground">{row.original.lastUsedAt ? formatRelative(row.original.lastUsedAt) : '—'}</span>,
-    },
-  ];
-
-  return (
-    <Card>
-      <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-        <CardTitle className="text-base">Uso por proveedor y modelo</CardTitle>
-        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          <span>{fmt(totalCalls)} llamadas</span>
-          <span>{fmt(totalTokens)} tokens</span>
-        </div>
-      </CardHeader>
-      <CardContent>
-        {summary.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            Sin registros todavía. El consumo se mide a partir de la primera llamada de IA.
-          </p>
-        ) : (
-          <DataTable columns={columns} data={summary} hideToolbar hidePagination />
-        )}
-      </CardContent>
-    </Card>
   );
 }
 

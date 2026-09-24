@@ -30,6 +30,6 @@ import { ScheduledPostPublisherService } from './scheduled-post-publisher.servic
     ScheduledPostPublisherService,
     PostInsightsService,
   ],
-  exports: [CampaignExecutorService, CampaignSchedulerService, CampaignWorkerService],
+  exports: [CampaignExecutorService, CampaignSchedulerService, CampaignWorkerService, PostInsightsService],
 })
 export class CampaignExecutionModule {}

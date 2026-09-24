@@ -196,6 +196,20 @@ export interface AiUsageSummaryRow {
   lastUsedAt: string | null;
 }
 
+/** Punto de serie temporal (un día + proveedor + modelo) para las gráficas de uso. */
+export interface AiUsageTimeseriesRow {
+  date: string;
+  provider: string;
+  model: string;
+  calls: number;
+  ok: number;
+  errors: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  avgLatencyMs: number;
+}
+
 export interface PromptTemplateView {
   feature: AiPromptFeature;
   /** Instrucciones de la función editables por el usuario. */
@@ -737,6 +751,78 @@ this.logger.log(`Análisis automático de comentarios: ${analyzed.length}/${ids.
         };
       })
       .sort((a, b) => b.calls - a.calls);
+  }
+
+  /**
+   * Serie temporal de uso de IA (por día + proveedor + modelo) para las
+   * gráficas. `days` limita la ventana hacia atrás (por defecto 30).
+   */
+  async usageTimeseries(days = 30): Promise<AiUsageTimeseriesRow[]> {
+    const from = new Date();
+    from.setUTCHours(0, 0, 0, 0);
+    from.setUTCDate(from.getUTCDate() - Math.max(0, days - 1));
+
+    const rows = await this.prisma.aiUsage.findMany({
+      where: { createdAt: { gte: from } },
+      select: {
+        createdAt: true,
+        provider: true,
+        model: true,
+        status: true,
+        inputTokens: true,
+        outputTokens: true,
+        latencyMs: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    type DayBucket = {
+      calls: number;
+      ok: number;
+      errors: number;
+      inputTokens: number;
+      outputTokens: number;
+      latencySum: number;
+    };
+
+    const buckets = new Map<string, DayBucket>();
+    for (const r of rows) {
+      const key = `${r.createdAt.toISOString().slice(0, 10)}::${r.provider}::${r.model}`;
+      let b = buckets.get(key);
+      if (!b) {
+        b = { calls: 0, ok: 0, errors: 0, inputTokens: 0, outputTokens: 0, latencySum: 0 };
+        buckets.set(key, b);
+      }
+      b.calls += 1;
+      if (r.status === 'ERROR') b.errors += 1;
+      else b.ok += 1;
+      b.inputTokens += r.inputTokens;
+      b.outputTokens += r.outputTokens;
+      b.latencySum += r.latencyMs ?? 0;
+    }
+
+    return Array.from(buckets.entries())
+      .map(([key, b]) => {
+        const [date, provider, model] = key.split('::');
+        return {
+          date,
+          provider,
+          model,
+          calls: b.calls,
+          ok: b.ok,
+          errors: b.errors,
+          inputTokens: b.inputTokens,
+          outputTokens: b.outputTokens,
+          totalTokens: b.inputTokens + b.outputTokens,
+          avgLatencyMs: b.calls > 0 ? Math.round(b.latencySum / b.calls) : 0,
+        };
+      })
+      .sort(
+        (a, b) =>
+          a.date === b.date
+            ? `${a.provider}::${a.model}`.localeCompare(`${b.provider}::${b.model}`)
+            : a.date.localeCompare(b.date),
+      );
   }
 
   // ---------------------------------------------------------------------------

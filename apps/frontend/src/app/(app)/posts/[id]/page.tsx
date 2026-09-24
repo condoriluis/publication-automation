@@ -29,6 +29,7 @@ export default function PostDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const load = useCallback(() => {
@@ -71,6 +72,19 @@ export default function PostDetailPage() {
       toast.error(e instanceof Error ? e.message : 'No se pudo sincronizar');
     } finally {
       setSyncing(false);
+    }
+  }
+
+  async function refreshMetrics() {
+    setRefreshing(true);
+    try {
+      await api.post<PostDetail>(`/posts/${params.id}/refresh-metrics`);
+      toast.success('Estadísticas actualizadas');
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo actualizar las estadísticas');
+    } finally {
+      setRefreshing(false);
     }
   }
 
@@ -157,10 +171,16 @@ export default function PostDetailPage() {
               </Button>
             ) : null}
             {isPublished ? (
-              <Button size="sm" variant="outline" disabled={syncing} onClick={() => void syncComments()}>
-                <RefreshCw className={`size-4 ${syncing ? 'animate-spin' : ''}`} />
-                {syncing ? 'Sincronizando…' : 'Sincronizar comentarios'}
-              </Button>
+              <>
+                <Button size="sm" variant="outline" disabled={refreshing} onClick={() => void refreshMetrics()}>
+                  <RefreshCw className={`size-4 ${refreshing ? 'animate-spin' : ''}`} />
+                  {refreshing ? 'Actualizando…' : 'Actualizar estadísticas'}
+                </Button>
+                <Button size="sm" variant="outline" disabled={syncing} onClick={() => void syncComments()}>
+                  <RefreshCw className={`size-4 ${syncing ? 'animate-spin' : ''}`} />
+                  {syncing ? 'Sincronizando…' : 'Sincronizar comentarios'}
+                </Button>
+              </>
             ) : null}
           </div>
         </div>

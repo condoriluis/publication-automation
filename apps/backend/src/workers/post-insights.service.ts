@@ -91,6 +91,16 @@ export class PostInsightsService {
     }
   }
 
+  /** Refresca al instante las métricas de distribución de un post publicado. */
+  async refreshPost(postId: string): Promise<void> {
+    const post = await this.prisma.post.findUnique({
+      where: { id: postId },
+      select: { id: true, pageId: true, metaObjectId: true, publishedAt: true, status: true },
+    });
+    if (!post || post.status !== PostStatus.PUBLISHED || !post.metaObjectId) return;
+    await this.checkPost(post.id, post.pageId, post.metaObjectId, post.publishedAt ?? new Date(), Date.now());
+  }
+
   private async checkPost(
     postId: string,
     pageId: string,
