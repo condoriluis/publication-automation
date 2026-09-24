@@ -49,7 +49,7 @@ export class FacebookController {
     const host = req.get('host') ?? '';
     return {
       ...cfg,
-      webhookUrl: `${protocol}://${host}/webhooks/meta`,
+      webhookUrl: `${protocol}://${host}/api/v1/webhooks/meta`,
     };
   }
 
