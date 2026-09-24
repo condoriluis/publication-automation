@@ -95,4 +95,14 @@ export class FacebookController {
     const account = await this.facebook.disconnect(userId, id);
     return { success: true, account };
   }
+
+  /** Elimina permanentemente una cuenta no activa (y sus páginas en cascada). */
+  @Delete('accounts/:id/permanent')
+  async removeAccount(
+    @Param('id') id: string,
+    @CurrentUser('sub') userId: string,
+  ): Promise<{ success: boolean; account: { id: string; status: string } }> {
+    const account = await this.facebook.removeAccount(userId, id);
+    return { success: true, account };
+  }
 }

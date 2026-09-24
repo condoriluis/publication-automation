@@ -44,22 +44,22 @@ interface TutorialStep {
 function buildSteps(cfg: FacebookPublicConfig, origin: string): TutorialStep[] {
   const host = new URL(origin).host;
   const privacyUrl = `${origin}/privacy`;
-  const useCasesUrl = `https://developers.facebook.com/apps/${cfg.appId}/use_cases`;
+  const useCasesUrl = `https://developers.facebook.com/apps/${cfg.appId}/use_cases/`;
   const appSettingsUrl = `https://developers.facebook.com/apps/${cfg.appId}/settings/`;
-  const businessLoginUrl = `https://developers.facebook.com/apps/${cfg.appId}/business-login/settings/`;
+  const loginSettingsUrl = `https://developers.facebook.com/apps/${cfg.appId}/fb-login/settings/`;
 
   const scopes: TutorialStep['scopes'] = (cfg.scopes.length > 0 ? cfg.scopes : ['pages_read_engagement', 'pages_manage_posts']).map((scope) => {
     const desc =
       ({
-        business_management: 'Acceder a los activos del Portafolio empresarial.',
+        business_management: 'Acceder a los activos del Portafolio empresarial (no es necesario para publicar).',
         email: 'Identificar el correo de la cuenta conectada.',
         pages_manage_engagement: 'Responder y moderar comentarios desde el panel.',
         pages_manage_metadata: 'Suscribir las páginas a webhooks y renovar permisos.',
         pages_manage_posts: 'Publicar posts y programar campañas.',
         pages_read_engagement: 'Leer comentarios, reacciones y métricas de tus páginas.',
-        pages_read_user_content: 'Leer contenido que la persona publica en sus páginas (es opcional).',
+        pages_read_user_content: 'Requisito que agrega el caso de uso: actívala o el login falla.',
         pages_show_list: 'Ver la lista de páginas de la cuenta conectada.',
-        public_profile: 'Datos básicos del perfil (nombre e identificador).',
+        public_profile: 'Datos básicos del perfil (nombre e identificador). Se otorga solo.',
       }) as Record<string, string>;
     return { scope, desc: desc[scope] ?? 'Permiso solicitado por la integración.' };
   });
@@ -81,15 +81,15 @@ function buildSteps(cfg: FacebookPublicConfig, origin: string): TutorialStep[] {
     {
       id: 2,
       icon: <AppWindow className="size-4" />,
-      title: 'Crear / abrir tu aplicación',
-      subtitle: 'Caso de uso: contenido y administración de página',
+      title: 'Crear la app (experiencia nueva)',
+      subtitle: 'Caso de uso: Administrar todos los aspectos de tu página',
       content: [
-        'En Mis aplicaciones crea una app de tipo Negocio (Business), o abre la que ya tienes configurada.',
-        'En el apartado "Casos de uso" agrega (o confirma que estén) estos dos casos de uso:',
-        '1. Insertar contenido (Facebook, Instagram y Threads) en otros sitios web.',
-        '2. Administrar todos los aspectos de tu página.',
+        'En Mis aplicaciones pulsa Crear app.',
+        'Elige el caso de uso "Administrar todos los aspectos de tu página" (Manage everything on your Page).',
+        'NO elijas "Otros": esa app legacy no trae los permisos de página.',
+        'No asocies ningún negocio ni portafolio.',
       ],
-      tip: 'Con esos dos casos de uso Meta habilita el flujo OAuth para conectar la cuenta y gestionar las páginas compartidas.',
+      tip: 'Así la app queda en el panel nuevo con el menú "Casos de uso" y puede publicarse después con verificación individual.',
       url: useCasesUrl,
       urlLabel: 'Abrir casos de uso de tu app',
     },
@@ -99,9 +99,9 @@ function buildSteps(cfg: FacebookPublicConfig, origin: string): TutorialStep[] {
       title: 'Agregar el producto Facebook Login',
       subtitle: 'Habilita el flujo OAuth para conectar la cuenta',
       content: [
-        'Dentro de tu app, en Productos o Casos de uso, agrega Inicio de sesión con Facebook (Facebook Login).',
-        'También agrega el producto Webhooks (lo configuraremos más adelante).',
-        'Con estos productos, los usuarios pueden autorizar su cuenta desde el panel.',
+        'Dentro de tu app agrega el producto Inicio de sesión con Facebook (Facebook Login).',
+        'Activa la opción "Inicio de sesión de OAuth web".',
+        'Con este producto, la cuenta puede autorizarse desde este panel.',
       ],
       url: 'https://developers.facebook.com/docs/facebook-login/web',
       urlLabel: 'Documentación de Facebook Login',
@@ -128,13 +128,14 @@ function buildSteps(cfg: FacebookPublicConfig, origin: string): TutorialStep[] {
       title: 'URL de redirección OAuth',
       subtitle: 'A dónde vuelve Facebook tras autorizar',
       content: [
-        'En la sección Business Login settings de tu app agrega una URL válida de redireccionamiento de OAuth:',
+        'En la configuración de Facebook Login agrega una URL válida de redireccionamiento de OAuth:',
         cfg.redirectUri,
+        'Si la app corre también en producción, agrega además la URL de tu dominio desplegado terminada en /oauth/callback.',
         'Debe coincidir exactamente con META_OAUTH_REDIRECT_URI del servidor; si difiere, Facebook rechaza la conexión.',
       ],
       tip: 'Guarda los cambios y reinicia la ventana de Facebook si estabas autorizando.',
-      url: businessLoginUrl,
-      urlLabel: 'Abrir Business Login settings',
+      url: loginSettingsUrl,
+      urlLabel: 'Abrir configuración de Facebook Login',
     },
     {
       id: 6,
@@ -142,26 +143,26 @@ function buildSteps(cfg: FacebookPublicConfig, origin: string): TutorialStep[] {
       title: 'Permisos que solicita el panel',
       subtitle: 'Publicar, moderar y medir tus páginas',
       content: [
-        'Estos permisos son los que el panel pide al conectar la cuenta. Confirma que tu app incluya al menos estos (puede haber algunos extra como public_profile, es normal).',
+        'En Casos de uso → Administrar páginas → Permisos y funciones, activa estos permisos:',
+        'Además actívala pages_read_user_content (el caso de uso la exige: si falta, el login falla con "Invalid Scopes").',
       ],
       scopes,
-      tip: 'En Modo desarrollo solo funcionan con cuentas que tienen rol en la app; para producción hay que aprobarlos en Revisión de la app.',
+      tip: 'En Modo desarrollo los permisos funcionan solo con cuentas que tienen rol en la app (la tuya). No necesitas business_management ni Advanced Access para publicar en tu propia página.',
       url: 'https://developers.facebook.com/docs/permissions/reference',
       urlLabel: 'Referencia de permisos',
     },
     {
       id: 7,
       icon: <Webhook className="size-4" />,
-      title: 'Configurar el Webhook',
+      title: 'Configurar el Webhook (opcional)',
       subtitle: 'Recibe comentarios en tiempo real',
       content: [
-        'En el producto Webhooks, crea una suscripción para tu aplicación.',
-        'URL de callback:',
-        cfg.webhookUrl,
+        'Solo si quieres la funcionalidad de comentarios automáticos. Para publicar no es necesario.',
+        'En el producto Webhooks crea una suscripción para tu aplicación:',
+        `URL de callback: ${cfg.webhookUrl}`,
         'Token de verificación: el valor que definiste en META_WEBHOOK_VERIFY_TOKEN del servidor (debe coincidir).',
-        'Suscríbete al campo feed para que las páginas envíen los comentarios nuevos.',
       ],
-      tip: 'Si tu app está en Modo desarrollo y aún no se publica, los webhooks de producción no llegan; el panel detecta comentarios por sondeo ante un error 403 hasta publicar la app.',
+      tip: 'Hasta que la app no esté publicada, los webhooks de producción no llegan; el panel detecta comentarios por sondeo ante un error 403.',
       url: 'https://developers.facebook.com/docs/graph-api/webhooks',
       urlLabel: 'Documentación de Webhooks',
     },
@@ -181,13 +182,13 @@ function buildSteps(cfg: FacebookPublicConfig, origin: string): TutorialStep[] {
       id: 9,
       icon: <Rocket className="size-4" />,
       title: 'Modo desarrollo vs. producción',
-      subtitle: 'De tu cuenta personal a cualquier usuario',
+      subtitle: 'Por qué otras cuentas no ven las publicaciones',
       content: [
-        'Con la app en Modo desarrollo, conectar tu cuenta (con rol en la app) funciona sin revisión.',
-        'Para que cualquier persona conecte su cuenta: publica la app, aprueba los permisos con Advanced Access y completa la Revisión.',
-        'La app no publicada es la causa típica de los errores 403 en webhooks y sondeos de comentarios.',
+        'Con la app En desarrollo, las publicaciones creadas desde este sistema solo las ven la cuenta con rol en la app (la tuya) y los administradores de la página.',
+        'Para que todos vean los posts: publica la app desde el panel nuevo (sección Publicar).',
+        'Para publicar necesitas una verificación de identidad: individual (solo tu documento, sin empresa) o de negocio.',
       ],
-      tip: 'Prueba primero con tu cuenta y crea usuarios desde Control de Acceso antes de abrir la app al público.',
+      tip: 'Si al publicar te exige verificación de negocio, asegúrate de haber creado la app sin portafolio y usa la verificación individual.',
     },
     {
       id: 10,

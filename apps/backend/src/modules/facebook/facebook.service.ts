@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { Page, FacebookAccount } from '@prisma/client';
+import { FacebookAccount, LogCategory, Page } from '@prisma/client';
 import axios from 'axios';
+import { AuditService } from '../audit/audit.service';
 import { AppConfigService } from '../../config/app-config.service';
 import { CryptoService } from '../../common/crypto/crypto.service';
 import { AppLogger } from '../../common/logger/app-logger.service';
@@ -164,6 +165,7 @@ export class FacebookService {
     private readonly crypto: CryptoService,
     private readonly config: AppConfigService,
     private readonly logger: AppLogger,
+    private readonly audit: AuditService,
   ) {}
 
   /**
@@ -531,7 +533,47 @@ export class FacebookService {
       data: { status: 'DISCONNECTED' },
     });
     this.logger.info(`Cuenta de Facebook ${accountId} desconectada (usuario ${userId})`);
+    await this.audit.record({
+      userId,
+      action: 'facebook.account.disconnect',
+      category: LogCategory.FACEBOOK,
+      metadata: { accountId, facebookUserId: account.facebookUserId },
+    });
     return { id: accountId, status: 'DISCONNECTED' };
+  }
+
+  /**
+   * Elimina permanentemente una cuenta no activa y en cascada sus páginas,
+   * métricas, posts, comentarios y campañas. Solo se permite sobre cuentas
+   * que ya no están activas (expired/revoked/disconnected).
+   */
+  async removeAccount(userId: string, accountId: string): Promise<{ id: string; status: string }> {
+    const account = await this.prisma.facebookAccount.findFirst({
+      where: { id: accountId, userId },
+      select: { id: true, status: true, facebookUserId: true },
+    });
+    if (!account) {
+      throw new FacebookGraphError('Cuenta de Facebook no encontrada', {
+        status: 404,
+        body: { code: 100, message: 'Cuenta de Facebook no encontrada' },
+      });
+    }
+    if (account.status === 'ACTIVE') {
+      throw new FacebookGraphError('Desconecta la cuenta antes de eliminarla', {
+        status: 400,
+        body: { code: 100, message: 'Desconecta la cuenta antes de eliminarla' },
+      });
+    }
+
+    await this.prisma.facebookAccount.delete({ where: { id: accountId } });
+    this.logger.info(`Cuenta de Facebook ${accountId} eliminada permanentemente (usuario ${userId})`);
+    await this.audit.record({
+      userId,
+      action: 'facebook.account.remove',
+      category: LogCategory.FACEBOOK,
+      metadata: { accountId, facebookUserId: account.facebookUserId },
+    });
+    return { id: accountId, status: 'DELETED' };
   }
 
   /** GET /debug_token con input_token + app token. */

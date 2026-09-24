@@ -86,6 +86,18 @@ export class PagesService {
     return { synced, accountId: account.id, userId: account.userId };
   }
 
+  /** Sincroniza todas las páginas de una cuenta verificando que es del usuario. */
+  async syncAccount(userId: string, accountId: string): Promise<{ synced: number; accountId: string }> {
+    const account = await this.prisma.facebookAccount.findFirst({
+      where: { id: accountId, userId },
+      select: { id: true },
+    });
+    if (!account) throw new NotFoundException('Cuenta de Facebook no encontrada');
+
+    const res = await this.syncPages(account.id);
+    return { synced: res.synced, accountId: res.accountId };
+  }
+
   /** Sincroniza una página concreta (POST /pages/:id/sync). */
   async syncPage(userId: string, pageId: string, _dto?: SyncPagesDto): Promise<Page & { settings: Record<string, unknown> }> {
     const page = await this.prisma.page.findFirst({ where: { id: pageId, userId } });

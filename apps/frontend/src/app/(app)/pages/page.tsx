@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Link2, Unplug, RefreshCw, BookOpen } from 'lucide-react';
+import { Link2, Unplug, RefreshCw, BookOpen, Trash2 } from 'lucide-react';
 import { type ColumnDef } from '@tanstack/react-table';
 
 import { api } from '@/lib/api';
@@ -10,6 +10,16 @@ import type { Paginated, PageListRow, SafeFacebookAccount } from '@/lib/types';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { StatusBadge } from '@/components/status-badge';
 import { EmptyState } from '@/components/empty-state';
 import { LoadingRows } from '@/components/pagination';
@@ -31,6 +41,9 @@ export default function PagesPage() {
   const [pages, setPages] = useState<PageListRow[] | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState<string | null>(null);
+  const [accountToRemove, setAccountToRemove] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tutorialOpen, setTutorialOpen] = useState(false);
 
@@ -56,6 +69,8 @@ export default function PagesPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const hasActiveAccount = accounts?.some((a) => a.status === 'ACTIVE') ?? false;
 
   useEffect(() => {
     const channel = new BroadcastChannel('pa-fb-oauth');
@@ -91,6 +106,34 @@ export default function PagesPage() {
       toast.error(e instanceof Error ? e.message : 'No se pudo desconectar');
     } finally {
       setDisconnecting(null);
+    }
+  }
+
+  async function removeAccount(id: string) {
+    setRemoving(id);
+    try {
+      await api.delete(`/facebook/accounts/${id}/permanent`);
+      toast.success('Cuenta eliminada');
+      setAccountToRemove(null);
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo eliminar la cuenta');
+      setAccountToRemove(null);
+    } finally {
+      setRemoving(null);
+    }
+  }
+
+  async function syncAccount(id: string) {
+    setSyncing(id);
+    try {
+      const res = await api.post<{ synced: number }>(`/pages/accounts/${id}/sync`);
+      toast.success(`${res.synced} páginas sincronizadas desde Meta`);
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo sincronizar las páginas');
+    } finally {
+      setSyncing(null);
     }
   }
 
@@ -146,7 +189,7 @@ export default function PagesPage() {
           </Button>
           <Button disabled={connecting} className="bg-[#1877F2] hover:bg-[#0A5BC4] text-white shadow-sm" onClick={() => void connect()}>
             <FacebookIcon className="size-4" />
-            {connecting ? 'Preparando…' : 'Conectar cuenta de Facebook'}
+            {connecting ? 'Preparando…' : hasActiveAccount ? 'Conectar otra cuenta' : 'Conectar cuenta de Facebook'}
           </Button>
         </PageHeader>
 
@@ -188,15 +231,43 @@ export default function PagesPage() {
                   </div>
                   <StatusBadge value={a.status} label={ACCOUNT_STATUS_LABELS[a.status]} />
                 </CardHeader>
-                <CardContent className="flex items-center justify-between">
+                <CardContent className="flex items-center justify-between gap-3">
                   <div className="text-sm text-foreground/60">
                     <p><span className="font-medium">{a.pageCount}</span> páginas</p>
                     {a.tokenExpiresAt ? <p>Token expira: {formatDate(a.tokenExpiresAt, { dateStyle: 'medium' })}</p> : null}
                   </div>
-                  <Button size="sm" variant="outline" disabled={disconnecting === a.id} onClick={() => void disconnect(a.id)}>
-                    <Unplug className="size-4" />
-                    {disconnecting === a.id ? '…' : 'Desconectar'}
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    {a.status === 'ACTIVE' ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={syncing === a.id}
+                        title="Volver a traer la lista de páginas desde Meta"
+                        onClick={() => void syncAccount(a.id)}
+                      >
+                        <RefreshCw className={`size-4 ${syncing === a.id ? 'animate-spin' : ''}`} />
+                        {syncing === a.id ? 'Sincronizando…' : 'Sincronizar'}
+                      </Button>
+                    ) : null}
+                    {a.status === 'ACTIVE' ? (
+                      <Button size="sm" variant="outline" disabled={disconnecting === a.id} onClick={() => void disconnect(a.id)}>
+                        <Unplug className="size-4" />
+                        {disconnecting === a.id ? '…' : 'Desconectar'}
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={removing === a.id}
+                        title="Eliminar del panel"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => setAccountToRemove(a.id)}
+                      >
+                        <Trash2 className="size-4" />
+                        {removing === a.id ? '…' : 'Quitar'}
+                      </Button>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             ))}
@@ -220,6 +291,28 @@ export default function PagesPage() {
           <DataTable columns={columns} data={pages} />
         )}
       </section>
+
+      <AlertDialog open={accountToRemove !== null} onOpenChange={(open) => { if (!open) setAccountToRemove(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Quitar cuenta de Facebook?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se eliminará la cuenta y sus páginas del panel, junto con sus publicaciones,
+              comentarios y campañas. Esta acción no se puede deshacer. Tu cuenta de Facebook no se ve afectada.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={removing !== null}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={removing !== null}
+              onClick={() => { if (accountToRemove) void removeAccount(accountToRemove); }}
+            >
+              {removing ? 'Quitando…' : 'Sí, quitar'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

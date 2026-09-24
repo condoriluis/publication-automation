@@ -46,6 +46,15 @@ export class PagesController {
     return this.pages.updateSettings(userId, id, dto);
   }
 
+  @Post('accounts/:accountId/sync')
+  @Permissions('pages:write')
+  async syncAccount(
+    @CurrentUser('sub') userId: string,
+    @Param('accountId') accountId: string,
+  ) {
+    return this.pages.syncAccount(userId, accountId);
+  }
+
   @Post(':id/sync')
   @Permissions('pages:write')
   async sync(@CurrentUser('sub') userId: string, @Param('id') id: string, @Body() dto: SyncPagesDto) {
