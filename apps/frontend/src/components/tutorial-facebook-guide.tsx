@@ -51,7 +51,7 @@ function buildSteps(cfg: FacebookPublicConfig, origin: string): TutorialStep[] {
   const scopes: TutorialStep['scopes'] = (cfg.scopes.length > 0 ? cfg.scopes : ['pages_read_engagement', 'pages_manage_posts']).map((scope) => {
     const desc =
       ({
-        business_management: 'Acceder a los activos del Portafolio empresarial (no es necesario para publicar).',
+        business_management: 'Acceso a los activos del Portafolio empresarial. Obligatorio si alguna página pertenece a un negocio: sin él, esa página no se lista en /me/accounts.',
         email: 'Identificar el correo de la cuenta conectada.',
         pages_manage_engagement: 'Responder y moderar comentarios desde el panel.',
         pages_manage_metadata: 'Suscribir las páginas a webhooks y renovar permisos.',
@@ -146,9 +146,10 @@ function buildSteps(cfg: FacebookPublicConfig, origin: string): TutorialStep[] {
       content: [
         'En Casos de uso → Administrar páginas → Permisos y funciones, activa estos permisos:',
         'Además activa pages_read_user_content (el caso de uso la exige: si falta, el login falla con "Invalid Scopes").',
+        'Activa también business_management: desde la API v19+, las páginas que pertenecen a un Portafolio/negocio solo se devuelven en /me/accounts si la app pide este permiso. Sin él, esas páginas NO aparecen al conectar.',
       ],
       scopes,
-      tip: 'En Modo desarrollo los permisos funcionan solo con cuentas que tienen rol en la app (la tuya). No necesitas business_management ni Advanced Access para publicar en tu propia página.',
+      tip: 'En Modo desarrollo los permisos funcionan con cuentas que tienen rol en la app (la tuya). business_management sí es necesario si una página pertenece a un negocio (Portafolio): con el permiso estándar y tu rol en la app basta; no requiere App Review ni Advanced Access para tu propia cuenta.',
       url: 'https://developers.facebook.com/docs/permissions/reference',
       urlLabel: 'Referencia de permisos',
     },
@@ -175,9 +176,10 @@ function buildSteps(cfg: FacebookPublicConfig, origin: string): TutorialStep[] {
       content: [
         'Vuelve a la página Páginas de este panel y pulsa Conectar cuenta de Facebook.',
         'Se abrirá la ventana de Facebook: revisa los permisos y pulsa Continuar.',
+        'Si tus páginas pertenecen a un negocio (Portafolio), Meta pide además autorizar el negocio en esa misma ventana: acéptalo, o esas páginas no aparecerán.',
         'El panel guarda el token (válido ~60 días). Si expira, reconecta para renovarlo automáticamente.',
       ],
-      tip: 'Puedes cerrar la ventana de Facebook: el panel se actualiza solo al completar la conexión.',
+      tip: 'Si ya conectaste antes sin autorizar el negocio, Meta no vuelve a preguntarlo: por eso el panel reconecta con auth_type=rerequest. Si aun así no aparece el negocio, usa el enlace "Editar configuraciones previas" de la ventana de Facebook y cóncelo.',
     },
     {
       id: 9,
