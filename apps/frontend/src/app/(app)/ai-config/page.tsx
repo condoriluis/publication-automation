@@ -159,8 +159,9 @@ export default function AiConfigPage() {
 
   useEffect(() => {
     if (!canManage) return;
+    const tz = typeof window !== 'undefined' ? window.Intl.DateTimeFormat().resolvedOptions().timeZone : 'UTC';
     api
-      .get<AiUsageTimeseriesRow[]>(`/ai/usage/timeseries?days=${seriesDays}`)
+      .get<AiUsageTimeseriesRow[]>(`/ai/usage/timeseries?days=${seriesDays}&tz=${encodeURIComponent(tz)}`)
       .then(setTimeseries)
       .catch(() => setTimeseries([]));
   }, [canManage, seriesDays]);

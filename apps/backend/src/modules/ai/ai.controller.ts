@@ -113,9 +113,12 @@ export class AiController {
   @Get('usage/timeseries')
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Uso de IA por día y proveedor/modelo (para gráficas temporales)' })
-  async usageTimeseries(@Query('days') days?: string) {
+  async usageTimeseries(@Query('days') days?: string, @Query('tz') tz?: string) {
     const parsed = days ? parseInt(days, 10) : 30;
-    return this.aiService.usageTimeseries(Number.isFinite(parsed) ? Math.min(Math.max(parsed, 1), 90) : 30);
+    return this.aiService.usageTimeseries(
+      Number.isFinite(parsed) ? Math.min(Math.max(parsed, 1), 90) : 30,
+      tz,
+    );
   }
 
   @Get('prompts')

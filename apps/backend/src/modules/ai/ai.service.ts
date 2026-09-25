@@ -756,11 +756,42 @@ this.logger.log(`Análisis automático de comentarios: ${analyzed.length}/${ids.
   /**
    * Serie temporal de uso de IA (por día + proveedor + modelo) para las
    * gráficas. `days` limita la ventana hacia atrás (por defecto 30).
+   *
+   * El agrupado se hace por *día local del usuario* (`timeZone`, IANA): un
+   * registro creado a las 20:17 en Bolivia (UTC-4) pertenece al día local
+   * actual, aunque en UTC ya sea el día siguiente. Sin esto el gráfico
+   * mostraba fechas "del futuro" para zonas horarias al oeste de UTC.
    */
-  async usageTimeseries(days = 30): Promise<AiUsageTimeseriesRow[]> {
-    const from = new Date();
-    from.setUTCHours(0, 0, 0, 0);
-    from.setUTCDate(from.getUTCDate() - Math.max(0, days - 1));
+  async usageTimeseries(days = 30, timeZone?: string): Promise<AiUsageTimeseriesRow[]> {
+    const tz = timeZone && /^[A-Za-z0-9_+./-]+$/.test(timeZone) ? timeZone : 'UTC';
+    let formatLocalDay: Intl.DateTimeFormat;
+    try {
+      formatLocalDay = new Intl.DateTimeFormat('en-CA', {
+        timeZone: tz,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      });
+    } catch {
+      formatLocalDay = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'UTC',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      });
+    }
+    // en-CA imprime YYYY-MM-DD (orden ISO), ideal como clave de día local.
+    const localDayOf = (d: Date): string => formatLocalDay.format(d);
+
+    const now = new Date();
+    // "Hoy" y el inicio de la ventana en el calendario local del usuario.
+    const today = localDayOf(now);
+    const [ty, tm, td] = today.split('-').map(Number);
+    const windowStartUtc = Date.UTC(ty, tm - 1, td - Math.max(0, days - 1));
+    const windowStartDay = new Date(windowStartUtc).toISOString().slice(0, 10);
+    // Margen de 48h por si el cliente está adelantado respecto al servidor
+    // (cualquier fecha fuera de la ventana se descarta más abajo).
+    const from = new Date(windowStartUtc - 48 * 60 * 60 * 1000);
 
     const rows = await this.prisma.aiUsage.findMany({
       where: { createdAt: { gte: from } },
@@ -787,7 +818,10 @@ this.logger.log(`Análisis automático de comentarios: ${analyzed.length}/${ids.
 
     const buckets = new Map<string, DayBucket>();
     for (const r of rows) {
-      const key = `${r.createdAt.toISOString().slice(0, 10)}::${r.provider}::${r.model}`;
+      const date = localDayOf(r.createdAt);
+      // Solo dentro de la ventana [inicio, hoy] en el calendario local.
+      if (date < windowStartDay || date > today) continue;
+      const key = `${date}::${r.provider}::${r.model}`;
       let b = buckets.get(key);
       if (!b) {
         b = { calls: 0, ok: 0, errors: 0, inputTokens: 0, outputTokens: 0, latencySum: 0 };
