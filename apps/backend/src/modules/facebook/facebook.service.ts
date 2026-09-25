@@ -359,6 +359,11 @@ export class FacebookService {
       redirect_uri: this.config.facebookRedirectUri,
       state,
       response_type: 'code',
+      // rerequest: obliga a Meta a preguntar TODOS los permisos de nuevo aunque
+      // el usuario ya los "declinó" en una conexión anterior. Sin esto, al
+      // reconectar una cuenta nueva, business_management puede omitirse y las
+      // páginas vinculadas a un Business no aparecen en /me/accounts.
+      auth_type: 'rerequest',
       scope: this.config.facebookScopes.join(','),
     });
     return `${FACEBOOK_OAUTH_DIALOG_BASE}/${this.config.facebookApiVersion}/dialog/oauth?${params.toString()}`;
