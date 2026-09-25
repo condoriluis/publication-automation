@@ -134,7 +134,7 @@ export function UsageKpis({ summary }: { summary: AiUsageSummaryRow[] }) {
         <CardTitle className="text-base">Metricas de consumo</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3">
           {items.map((it) => (
             <div key={it.label} className="flex items-center gap-3 rounded-xl border bg-background p-3">
               <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[#1877F2]/10 text-[#1877F2]">
@@ -382,7 +382,8 @@ export function UsageCharts({
                         tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
                         tickLine={false}
                         axisLine={{ stroke: 'var(--border)' }}
-                        interval={0}
+                        interval="preserveStartEnd"
+                        minTickGap={12}
                         tickFormatter={(v: string) => (v.length > 14 ? `${v.slice(0, 13)}...` : v)}
                       />
                       <YAxis
@@ -471,7 +472,17 @@ export function UsageCharts({
               <p className="mb-3 text-xs text-muted-foreground">
                 Todas las llamadas de IA. Pasa el cursor sobre los puntos para ver el detalle.
               </p>
-              <div className="h-56">{trendArea(trendTab)}</div>
+              {dayData.length === 0 ? (
+                <div className="flex h-56 items-center justify-center rounded-lg border border-dashed px-4 text-center text-sm text-muted-foreground">
+                  Sin datos en este rango de fechas todavía. Intenta con otra cantidad de días.
+                </div>
+              ) : (
+                <div className="h-56 w-full">
+                  <ResponsiveContainer key={trendTab} width="100%" height="100%">
+                    {trendArea(trendTab)}
+                  </ResponsiveContainer>
+                </div>
+              )}
             </div>
 
             {showTable ? (
